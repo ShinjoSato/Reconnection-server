@@ -30,12 +30,54 @@ io.on('connection', socket => {
     console.log(`disconnect: %s, %s`, reason, socket.id);
   });
 
+  socket.on('login-check', (data) => {
+    console.log(data)
+    const tmp_pool = new Pool({
+      user: 'postgres',
+      host: data.ip,
+      database: 'postgres',
+      password: 'password',
+      port: data.port
+    })
+    // console.log('コネクトできるかな？',tmp_pool.connect())
+    tmp_pool.connect().then(client => {
+      console.log('コネクト！')
+      pool.query(`
+        select id,name,image from user_table 
+        where id = '${data.userId}'
+        and pgp_sym_decrypt(password, 'password') = '${data.password}';
+      `, (err, res) => {
+        console.log(err)
+        console.log(res.rows)
+        if(res){
+          socket.emit('approve-login',res.rows[0])
+        }
+      })
+    })
+    .catch(err => {
+      console.log('エラーだよー')
+      console.log(err)
+    })
+  })
+
   socket.on('chat', (data) => {
     console.log('data:',data)
     pool.query(`insert into tweet(tweet,room_id,user_id) values('${data.text}',${data.room},'${data.user}') returning *;`, (err, res) => {
       console.log(err, res)
       socket.emit('update-room',{rows: res.rows})
       // pool.end()
+    })
+  })
+
+  socket.on('first-login-room', (data) => {
+    console.log('first login room: ',data)
+    pool.query(`
+      select * from chatroom
+      left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
+      where usrroom.user_id = '${data.id}';
+    `, (err, res) => {
+      socket.emit('send-initial-rooms',{rows: res.rows})
+      console.log('res:',res.rows)
     })
   })
 
