@@ -31,7 +31,7 @@ io.on('connection', socket => {
   });
 
   socket.on('login-check', (data) => {
-    console.log(data)
+    console.log('login check: ', data)
     const tmp_pool = new Pool({
       user: 'postgres',
       host: data.ip,
@@ -47,9 +47,10 @@ io.on('connection', socket => {
         where id = '${data.userId}'
         and pgp_sym_decrypt(password, 'password') = '${data.password}';
       `, (err, res) => {
-        console.log(err)
-        console.log(res.rows)
+        // console.log(err)
+        // console.log(res.rows)
         if(res){
+          console.log('approve loginを実行します')
           socket.emit('approve-login',res.rows[0])
         }
       })
@@ -76,8 +77,9 @@ io.on('connection', socket => {
       left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
       where usrroom.user_id = '${data.id}';
     `, (err, res) => {
-      socket.emit('send-initial-rooms',{rows: res.rows})
-      console.log('res:',res.rows)
+      socket.emit('send-initial-rooms',{rows: res.rows},(response) => {
+        console.log('res:',res.rows)
+      })
     })
   })
 
