@@ -30,8 +30,7 @@ io.on('connection', socket => {
     console.log(`disconnect: %s, %s`, reason, socket.id);
   });
 
-  socket.on('login-check', (data) => {
-    console.log('login check: ', data)
+  socket.on('connect-to-server', (data, callback) => {
     const tmp_pool = new Pool({
       user: 'postgres',
       host: data.ip,
@@ -39,53 +38,49 @@ io.on('connection', socket => {
       password: 'password',
       port: data.port
     })
-    // console.log('コネクトできるかな？',tmp_pool.connect())
     tmp_pool.connect().then(client => {
-      console.log('コネクト！')
       pool.query(`
-        select id,name,image from user_table 
-        where id = '${data.userId}'
-        and pgp_sym_decrypt(password, 'password') = '${data.password}';
+        select usrt.id as id, usrt.name as name, pict.path as image from user_table as usrt
+        join picture_table as pict on pict.id = usrt.image
+        where usrt.id = '${data.userId}'
+        and pgp_sym_decrypt(usrt.password, 'password') = '${data.password}';
       `, (err, res) => {
-        // console.log(err)
-        // console.log(res.rows)
-        if(res){
-          console.log('approve loginを実行します')
-          socket.emit('approve-login',res.rows[0])
+        if(res && 0 < res.rows.length){
+          switch(data.method){
+            case 'login':
+              callback(res.rows[0])
+              break
+            case 'register':
+              delete data.method
+              callback(data)
+              break
+          }
         }
       })
     })
     .catch(err => {
-      console.log('エラーだよー')
       console.log(err)
     })
   })
 
   socket.on('chat', (data) => {
-    console.log('data:',data)
     pool.query(`insert into tweet(tweet,room_id,user_id) values('${data.text}',${data.room},'${data.user}') returning *;`, (err, res) => {
-      console.log(err, res)
       socket.emit('update-room',{rows: res.rows})
       // pool.end()
     })
   })
 
-  socket.on('first-login-room', (data) => {
-    console.log('first login room: ',data)
+  socket.on('first-login-room', (data, callback) => {
     pool.query(`
       select * from chatroom
       left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
       where usrroom.user_id = '${data.id}';
     `, (err, res) => {
-      socket.emit('send-initial-rooms',{rows: res.rows},(response) => {
-        console.log('res:',res.rows)
-      })
+      callback({rows: res.rows})
     })
   })
 
-  socket.on('check-in-room', (data) => {
-    console.log('data:',data)
-    console.log(`RECEIVE: room id: ${data.id}`);
+  socket.on('check-in-room', (data, callback) => {
     pool.query(`
       select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon from tweet
       join (
@@ -95,14 +90,11 @@ io.on('connection', socket => {
       where room_id = '${data.id}'
       order by tweet.id desc;
     `, (err, res) => {
-        console.log('ERROR: ',err)
-        socket.emit('receive-talk-in-room',{rows: res.rows})
-        console.log('receive successfully!\nrow length:', res.rows.length)
+        callback({rows: res.rows})
     })
   });
 
-  socket.on('new-message', (data) => {
-    console.log('取得したデータは',data)
+  socket.on('new-message', (data, callback) => {
     pool.query(`
       select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon from tweet
       join (
@@ -111,25 +103,18 @@ io.on('connection', socket => {
       ) as user_table on tweet.user_id = user_table.id
       where tweet.id=${data.id};
     `, (err, res) => {
-      console.log(err,res)
-      socket.emit('send-new-message',{rows: res.rows})
-      console.log('send new message successfully!', res.rows.length)
+      callback({rows: res.rows})
     })
   });
 
-  socket.on('call-room-list', (data) => {
-    console.log('data:',data)
+  socket.on('call-room-list', (data, callback) => {
     pool.query(`
       select chatroom.id,chatroom.name,picture_table.path,user_chatroom_unit.user_id from chatroom
       join picture_table on chatroom.icon = picture_table.id
       join user_chatroom_unit on chatroom.id = user_chatroom_unit.chatroom_id
       where user_chatroom_unit.user_id = '${data.user_id}';
     `, (err, res) => {
-        // console.log(err, res)
-        for (var row of res.rows) {
-          console.log(row)
-        }
-        socket.emit('send-room-list',{rows: res.rows})
+        callback({rows: res.rows})
         // pool.end()
     })
   })
