@@ -46,9 +46,9 @@ insert into user_table(id,name,password,image) values('sample01','サンプル�
 insert into chatroom(icon,name) values(1,'ダミールーム'),(1,'ルーム１'),(1,'ルーム２'),(1,'ルーム３');
 insert into tweet(tweet,room_id,user_id) values('サンプルに呟きます',1,'sample01');
 insert into picture_table(label,path)
-values('マイケル画像','./src/images/free_max64x64.jpg'),
-('メリンダ画像','./src/images/woman01_64x64.jpg'),
-('チェン画像','./src/images/man02_64x64.jpg');
+values('マイケル画像','./images/free_max64x64.jpg'),
+('メリンダ画像','./images/woman01_64x64.jpg'),
+('チェン画像','./images/man02_64x64.jpg');
 insert into user_table(id,name,password,image) values
 ('sample02','Micel',pgp_sym_encrypt('sample','password'),2),
 ('sample03','Melinda',pgp_sym_encrypt('sample','password'),3),

@@ -2,6 +2,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const app = express();
+const fs = require('fs')
 
 // socket.io
 const port = 8000;
@@ -45,10 +46,15 @@ io.on('connection', socket => {
         where usrt.id = '${data.userId}'
         and pgp_sym_decrypt(usrt.password, 'password') = '${data.password}';
       `, (err, res) => {
+        var user = (res.rows).map(function(row){
+          var r = row
+          r.image = getImage(r.image)
+          return r
+        })
         if(res && 0 < res.rows.length){
           switch(data.method){
             case 'login':
-              callback(res.rows[0])
+              callback(user[0])
               break
             case 'register':
               delete data.method
@@ -90,7 +96,12 @@ io.on('connection', socket => {
       where room_id = '${data.id}'
       order by tweet.id desc;
     `, (err, res) => {
-        callback({rows: res.rows})
+      var tweet = (res.rows).map(function(row){
+        var r = row
+        r.user_icon = getImage(r.user_icon)
+        return r
+      })
+      callback({rows: tweet})
     })
   });
 
@@ -103,7 +114,12 @@ io.on('connection', socket => {
       ) as user_table on tweet.user_id = user_table.id
       where tweet.id=${data.id};
     `, (err, res) => {
-      callback({rows: res.rows})
+      var tweet = (res.rows).map(function(row){
+        var r = row
+        r.user_icon = getImage(r.user_icon)
+        return r
+      })
+      callback({rows: tweet})
     })
   });
 
@@ -114,10 +130,35 @@ io.on('connection', socket => {
       join user_chatroom_unit on chatroom.id = user_chatroom_unit.chatroom_id
       where user_chatroom_unit.user_id = '${data.user_id}';
     `, (err, res) => {
-        callback({rows: res.rows})
+        var room = (res.rows).map(function(row){
+          var r = row
+          r.path = getImage(r.path)
+          return r
+        })
+        callback({rows: room})
         // pool.end()
     })
   })
+
+  socket.on('receive-picture', (data, callback) => {
+    var matches = String(data.binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+    var response = {
+      type: matches[1],
+      data: Buffer.from(matches[2], 'base64')
+    }
+    fs.writeFile('./images/temporary.png', response.data, 'base64', function(err) {
+      if(err){
+        callback(`couldn't save the image.`)
+      }else{
+        callback('receive picture success!')
+      }
+    })
+  })
+
+  function getImage(path){
+    const data = fs.readFileSync(path)
+    return "data:image;base64,"+ data.toString("base64")
+  }
 });
 
 // expressで静的ページにアクセスする.
