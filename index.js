@@ -3,6 +3,7 @@ const http = require('http');
 const express = require('express');
 const app = express();
 const fs = require('fs')
+const {randomBytes} = require('crypto')
 
 // socket.io
 const port = 8000;
@@ -70,10 +71,36 @@ io.on('connection', socket => {
   })
 
   socket.on('chat', (data) => {
-    pool.query(`insert into tweet(tweet,room_id,user_id) values('${data.text}',${data.room},'${data.user}') returning *;`, (err, res) => {
-      socket.emit('update-room',{rows: res.rows})
-      // pool.end()
-    })
+    if(data.picture){
+      // With picture
+      var path = `./images/${generateRandomString(12)}.png`
+      while(isExisted(path)){
+        path = `./images/${generateRandomString(12)}.png`
+      }
+      fs.writeFile(path, setImage(data.picture), 'base64', function(err) {
+        pool.query(`
+          insert into picture_table(label,path)
+          values('${ '練習用のラベル' }','${ path }') returning *;
+        `, (error, res) => {
+          pool.query(`
+            insert into tweet(tweet,room_id,user_id,picture_id)
+            values('${data.text}',${data.room},'${data.user}',${ res.rows[0].id }) returning *;
+          `, (error, res) => {
+            socket.emit('update-room',{rows: res.rows})
+            // pool.end()
+          })
+        })
+      })
+    }else{
+      // Without pictures
+      pool.query(`
+        insert into tweet(tweet,room_id,user_id)
+        values('${data.text}',${data.room},'${data.user}') returning *;
+      `, (error, res) => {
+        socket.emit('update-room',{rows: res.rows})
+        // pool.end()
+      })
+    }
   })
 
   socket.on('first-login-room', (data, callback) => {
@@ -88,17 +115,21 @@ io.on('connection', socket => {
 
   socket.on('check-in-room', (data, callback) => {
     pool.query(`
-      select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon from tweet
+      select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon, picture_table.path as picture from tweet
       join (
           select user_table.id,user_table.name,picture_table.path from user_table
           join picture_table on user_table.image = picture_table.id
       ) as user_table on tweet.user_id = user_table.id
+      left join picture_table on tweet.picture_id = picture_table.id
       where room_id = '${data.id}'
       order by tweet.id desc;
     `, (err, res) => {
       var tweet = (res.rows).map(function(row){
         var r = row
         r.user_icon = getImage(r.user_icon)
+        if(r.picture){
+          r.picture = getImage(r.picture)
+        }
         return r
       })
       callback({rows: tweet})
@@ -158,6 +189,23 @@ io.on('connection', socket => {
   function getImage(path){
     const data = fs.readFileSync(path)
     return "data:image;base64,"+ data.toString("base64")
+  }
+
+  function setImage(binary){
+    var matches = String(binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+    var response = {
+      type: matches[1],
+      data: Buffer.from(matches[2], 'base64')
+    }
+    return response.data
+  }
+
+  function generateRandomString(length) {
+    return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
+  }
+
+  function isExisted(file) {
+    return fs.existsSync(file)
   }
 });
 
