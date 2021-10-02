@@ -35,10 +35,10 @@ io.on('connection', socket => {
   socket.on('connect-to-server', (data, callback) => {
     const tmp_pool = new Pool({
       user: 'postgres',
-      host: data.ip,
+      host: 'localhost',
       database: 'postgres',
       password: 'password',
-      port: data.port
+      port: 5432
     })
     tmp_pool.connect().then(client => {
       pool.query(`
