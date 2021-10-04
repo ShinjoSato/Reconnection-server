@@ -44,18 +44,22 @@ create table user_chatroom_unit (
 -- サンプルデータ集
 insert into picture_table(label,path) values('ダミー画像','');
 insert into user_table(id,name,password,image) values('sample01','サンプルユーザー',pgp_sym_encrypt('sample','password'),1);
-insert into chatroom(icon,name) values(1,'ダミールーム'),(1,'ルーム１'),(1,'ルーム２'),(1,'ルーム３');
-insert into tweet(tweet,room_id,user_id) values('サンプルに呟きます',1,'sample01');
-insert into picture_table(label,path)
-values('マイケル画像','./images/free_max64x64.jpg'),
-('メリンダ画像','./images/woman01_64x64.jpg'),
-('チェン画像','./images/man02_64x64.jpg');
+insert into picture_table(label,path) values
+('マイケル画像','/tmp_images/free_max64x64.jpg'),
+('メリンダ画像','/tmp_images/woman01_64x64.jpg'),
+('チェン画像','/tmp_images/man02_64x64.jpg'),
+('街','/tmp_images/city01.jpg'),
+('自然','/tmp_images/nature01.jpg'),
+('夜空','/tmp_images/nightsky01.jpg'),
+('ビーチ','/tmp_images/beach01.jpg');
 insert into user_table(id,name,password,image) values
 ('sample02','Micel',pgp_sym_encrypt('sample','password'),2),
 ('sample03','Melinda',pgp_sym_encrypt('sample','password'),3),
 ('sample04','Chen',pgp_sym_encrypt('sample','password'),4);
+insert into chatroom(icon,name) values(1,'ダミールーム'),(5,'ルーム１'),(6,'ルーム２'),(7,'ルーム３');
 insert into user_chatroom_unit
 values('sample02',4),('sample04',3),('sample02',2),('sample03',3),('sample04',4);
+insert into tweet(tweet,room_id,user_id) values('サンプルに呟きます',1,'sample01');
 
 -- ユーザー取得
 select user_table.id,user_table.name,picture_table.path from user_table 
@@ -72,6 +76,19 @@ join (
     join picture_table on user_table.image = picture_table.id
 ) as user_table on tweet.user_id = user_table.id
 where room_id = 1;
+-- テーブル内データ削除用
+delete from user_chatroom_unit;
+delete from tweet;
+delete from chatroom;
+delete from user_table;
+delete from picture_table;
+
+-- テーブル削除用
+drop table user_chatroom_unit;
+drop table tweet;
+drop table chatroom;
+drop table user_table;
+drop table picture_table;
 
 -- メモ
 select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon, picture_table.path from tweet

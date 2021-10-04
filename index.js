@@ -14,12 +14,31 @@ const io = require('socket.io')(server);
 
 // PostgreSQL
 const { Pool } = require('pg')
-const pool = new Pool({
+// const pool_data = {
+//   user: 'postgres',
+//   host: '192.168.0.7',
+//   database: 'postgres',
+//   password: 'password',
+//   port: 15432
+// }
+const pool_data = {
   user: 'postgres',
   host: 'localhost',
   database: 'postgres',
   password: 'password',
   port: 5432
+}
+const pool = new Pool(pool_data)
+
+// Picture Directory
+// const picture_directory = '/tmp_images'
+const picture_directory = 'images'
+
+// console.log(pool)
+pool.query(`select * from tweet;`, (err, res) => {
+  console.log('err:', err)
+  console.log('res:', res)
+  console.log(res.rows)
 })
 
 
@@ -33,13 +52,7 @@ io.on('connection', socket => {
   });
 
   socket.on('connect-to-server', (data, callback) => {
-    const tmp_pool = new Pool({
-      user: 'postgres',
-      host: 'localhost',
-      database: 'postgres',
-      password: 'password',
-      port: 5432
-    })
+    const tmp_pool = new Pool(pool_data)
     tmp_pool.connect().then(client => {
       pool.query(`
         select usrt.id as id, usrt.name as name, pict.path as image from user_table as usrt
@@ -73,9 +86,9 @@ io.on('connection', socket => {
   socket.on('chat', (data) => {
     if(data.picture){
       // With picture
-      var path = `./images/${generateRandomString(12)}.png`
+      var path = `${ picture_directory }/${generateRandomString(12)}.png`
       while(isExisted(path)){
-        path = `./images/${generateRandomString(12)}.png`
+        path = `${ picture_directory }/${generateRandomString(12)}.png`
       }
       fs.writeFile(path, setImage(data.picture), 'base64', function(err) {
         pool.query(`
@@ -177,7 +190,7 @@ io.on('connection', socket => {
       type: matches[1],
       data: Buffer.from(matches[2], 'base64')
     }
-    fs.writeFile('./images/temporary.png', response.data, 'base64', function(err) {
+    fs.writeFile(`${ picture_directory }/temporary.png`, response.data, 'base64', function(err) {
       if(err){
         callback(`couldn't save the image.`)
       }else{
