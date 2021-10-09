@@ -34,11 +34,17 @@ const pool = new Pool(pool_data)
 // const picture_directory = '/tmp_images'
 const picture_directory = 'images'
 
+let CHATROOM = null
+let ALLROOM = []
+
 // console.log(pool)
-pool.query(`select * from tweet;`, (err, res) => {
+pool.query(`select * from chatroom;`, (err, res) => {
   console.log('err:', err)
   console.log('res:', res)
   console.log(res.rows)
+  for(const room of res.rows){
+    ALLROOM.push(room.id)
+  }
 })
 
 
@@ -57,9 +63,9 @@ io.on('connection', socket => {
       pool.query(`
         select usrt.id as id, usrt.name as name, pict.path as image from user_table as usrt
         join picture_table as pict on pict.id = usrt.image
-        where usrt.id = '${data.userId}'
-        and pgp_sym_decrypt(usrt.password, 'password') = '${data.password}';
-      `, (err, res) => {
+        where usrt.id = $1
+        and pgp_sym_decrypt(usrt.password, 'password') = $2;
+      `, [data.userId, data.password], (err, res) => {
         var user = (res.rows).map(function(row){
           var r = row
           r.image = getImage(r.image)
@@ -93,13 +99,22 @@ io.on('connection', socket => {
       fs.writeFile(path, setImage(data.picture), 'base64', function(err) {
         pool.query(`
           insert into picture_table(label,path)
-          values('${ '練習用のラベル' }','${ path }') returning *;
-        `, (error, res) => {
+          values($1,$2) returning *;
+        `, ['練習用のラベル', path], (error, res) => {
           pool.query(`
             insert into tweet(tweet,room_id,user_id,picture_id)
-            values('${data.text}',${data.room},'${data.user}',${ res.rows[0].id }) returning *;
-          `, (error, res) => {
-            socket.emit('update-room',{rows: res.rows})
+            values($1,$2,$3,$4) returning *;
+          `, [data.text, data.room, data.user, res.rows[0].id], (error, res) => {
+            console.log('* to の確認 with picture*:',{rows: res.rows}, '\nCHATROOM:',CHATROOM)
+            for(const room of ALLROOM){
+              if(room == CHATROOM){
+                console.log('呟きを送る')
+                io.to(CHATROOM).emit('update-room',{rows: res.rows})
+              }else{
+                console.log('通知を送る')
+                io.to(room).emit('receive-notification', {rows:res.rows})
+              }
+            }
             // pool.end()
           })
         })
@@ -108,9 +123,17 @@ io.on('connection', socket => {
       // Without pictures
       pool.query(`
         insert into tweet(tweet,room_id,user_id)
-        values('${data.text}',${data.room},'${data.user}') returning *;
-      `, (error, res) => {
-        socket.emit('update-room',{rows: res.rows})
+        values($1,$2,$3) returning *;
+      `, [data.text, data.room, data.user], (error, res) => {
+        for(const room of ALLROOM){
+          if(room == CHATROOM){
+            console.log('呟きを送る')
+            io.to(room).emit('update-room',{rows: res.rows})
+          }else{
+            console.log('通知を送る')
+            io.to(room).emit('receive-notification', {rows:res.rows})
+          }
+        }
         // pool.end()
       })
     }
@@ -120,8 +143,10 @@ io.on('connection', socket => {
     pool.query(`
       select * from chatroom
       left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
-      where usrroom.user_id = '${data.id}';
-    `, (err, res) => {
+      where usrroom.user_id = $1;
+    `, [data.id], (err, res) => {
+      CHATROOM = res.rows[0].chatroom_id
+      socket.join(CHATROOM)
       callback({rows: res.rows})
     })
   })
@@ -134,9 +159,9 @@ io.on('connection', socket => {
           join picture_table on user_table.image = picture_table.id
       ) as user_table on tweet.user_id = user_table.id
       left join picture_table on tweet.picture_id = picture_table.id
-      where room_id = '${data.id}'
+      where room_id = $1
       order by tweet.id desc;
-    `, (err, res) => {
+    `, [data.id], (err, res) => {
       var tweet = (res.rows).map(function(row){
         var r = row
         r.user_icon = getImage(r.user_icon)
@@ -145,6 +170,9 @@ io.on('connection', socket => {
         }
         return r
       })
+      socket.leave(CHATROOM)
+      socket.join(data.id)
+      CHATROOM = data.id
       callback({rows: tweet})
     })
   });
@@ -156,8 +184,8 @@ io.on('connection', socket => {
           select user_table.id,user_table.name,picture_table.path from user_table
           join picture_table on user_table.image = picture_table.id
       ) as user_table on tweet.user_id = user_table.id
-      where tweet.id=${data.id};
-    `, (err, res) => {
+      where tweet.id=$1;
+    `, [data.id], (err, res) => {
       var tweet = (res.rows).map(function(row){
         var r = row
         r.user_icon = getImage(r.user_icon)
@@ -172,8 +200,8 @@ io.on('connection', socket => {
       select chatroom.id,chatroom.name,picture_table.path,user_chatroom_unit.user_id from chatroom
       join picture_table on chatroom.icon = picture_table.id
       join user_chatroom_unit on chatroom.id = user_chatroom_unit.chatroom_id
-      where user_chatroom_unit.user_id = '${data.user_id}';
-    `, (err, res) => {
+      where user_chatroom_unit.user_id = $1;
+    `, [data.user_id], (err, res) => {
         var room = (res.rows).map(function(row){
           var r = row
           r.path = getImage(r.path)
@@ -181,6 +209,22 @@ io.on('connection', socket => {
         })
         callback({rows: room})
         // pool.end()
+    })
+  })
+
+  socket.on('receive-room-member', (data,callback) => {
+    pool.query(`
+      select *,picture_table.path as picture from user_table
+      join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
+      join picture_table on user_table.image = picture_table.id
+      where user_chatroom_unit.chatroom_id = $1;
+    `, [data.id], (err, res) => {
+      var rows = (res.rows).map(function(row){
+        var r = row
+        r.picture = getImage(r.picture)
+        return r
+      })
+      callback(rows)
     })
   })
 

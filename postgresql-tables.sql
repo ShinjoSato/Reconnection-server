@@ -105,3 +105,7 @@ join (
     join picture_table on user_table.image = picture_table.id
 ) as user_table on tweet.user_id = user_table.id
 order by tweet.id;
+
+select * from user_table
+join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
+where user_chatroom_unit.chatroom_id = 4;
