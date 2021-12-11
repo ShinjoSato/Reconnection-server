@@ -153,7 +153,7 @@ io.on('connection', socket => {
 
   socket.on('check-in-room', (data, callback) => {
     pool.query(`
-      select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon, picture_table.path as picture from tweet
+      select tweet.id, tweet, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
       join (
           select user_table.id,user_table.name,picture_table.path from user_table
           join picture_table on user_table.image = picture_table.id
@@ -268,3 +268,13 @@ io.on('connection', socket => {
 
 // expressで静的ページにアクセスする.
 app.use(express.static(path.join(__dirname, 'static')));
+
+app.get("/disconnected", function (request, response) {
+  console.log('request:')
+  console.log(request)
+  
+  console.log('response:')
+  console.log(response)
+  response.set({ 'Access-Control-Allow-Origin': '*' })
+  response.json({message: "OK!"});
+});
