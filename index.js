@@ -6,8 +6,9 @@ const fs = require('fs')
 const {randomBytes} = require('crypto')
 
 // socket.io
+const host = 'localhost'; //'192.168.0.19';
 const port = 8000;
-const server = http.createServer(app).listen(port, () => {
+const server = http.createServer(app).listen(port, host, () => {
   console.log('server start. port=' + port);
 });
 const io = require('socket.io')(server);
@@ -228,6 +229,10 @@ io.on('connection', socket => {
     })
   })
 
+  socket.on('create-room', (data,callback) => {
+    require("./src/psql").createUserRoom(1, data.roomName, data.userId, callback);
+  });
+
   socket.on('receive-picture', (data, callback) => {
     var matches = String(data.binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
     var response = {
@@ -266,7 +271,25 @@ io.on('connection', socket => {
   }
 });
 
+function generateRandomString(length) {
+  return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '');
+}
+
+function isExisted(file) {
+  return fs.existsSync(file);
+}
+
+function setImage(binary){
+  var matches = String(binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+  var response = {
+    type: matches[1],
+    data: Buffer.from(matches[2], 'base64')
+  }
+  return response.data
+}
+
 // expressで静的ページにアクセスする.
+app.use(express.urlencoded({extended: true, limit: '10mb'}));
 app.use(express.static(path.join(__dirname, 'static')));
 
 app.get("/disconnected", function (request, response) {
@@ -277,4 +300,40 @@ app.get("/disconnected", function (request, response) {
   console.log(response)
   response.set({ 'Access-Control-Allow-Origin': '*' })
   response.json({message: "OK!"});
+});
+
+/**
+ * ユーザーを作成するのと同時にそのユーザー専用のRoomを作成する。
+ */
+app.post("/sign-on/check", function (request, response) {
+  response.set({ 'Access-Control-Allow-Origin': '*' });
+  const data = request.body;
+  if(data.picture!='null'){
+    var path = `./${ picture_directory }/${generateRandomString(12)}.png`
+    while(isExisted(path)){
+      path = `./${ picture_directory }/${generateRandomString(12)}.png`
+    }
+    fs.writeFileSync(path, setImage(data.picture), 'base64');  
+    pool.query("insert into picture_table(label,path) values($1,$2) returning *;", ['練習用のラベル', path])
+    .then(resp=>{
+      pool.query("insert into user_table(id,name,password,image) values($1,$2,pgp_sym_encrypt($3,'password'),$4) returning *;", [data.user_id, data.user_name, data.password1, resp.rows[0].id])
+      .then(res=>{
+        require("./src/psql").createUserRoom(res.rows[0].image, res.rows[0].name, res.rows[0].id, response);
+      })
+      .catch(error2=>{
+        response.json({message: "画像ありのユーザー登録に失敗しました。"});
+      });
+    })
+    .catch(error1=>{
+      response.json({message: "ユーザーの画像の登録に失敗しました。"})
+    });
+  }else{
+    pool.query("insert into user_table(id,name,password,image) values($1,$2,pgp_sym_encrypt($3,'password'),$4) returning *;", [data.user_id, data.user_name, data.password1,1])//1はダミー画像
+    .then(res=>{
+      require("./src/psql").createUserRoom(res.rows[0].image, res.rows[0].name, res.rows[0].id, response);
+    })
+    .catch(error=>{
+      response.json({message: "画像なしでユーザーの登録に失敗しました。"});
+    });
+  }
 });
