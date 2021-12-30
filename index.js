@@ -215,7 +215,7 @@ io.on('connection', socket => {
 
   socket.on('receive-room-member', (data,callback) => {
     pool.query(`
-      select *,picture_table.path as picture from user_table
+      select user_table.id, user_table.name, picture_table.path as picture from user_table
       join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
       join picture_table on user_table.image = picture_table.id
       where user_chatroom_unit.chatroom_id = $1;
@@ -227,6 +227,54 @@ io.on('connection', socket => {
       })
       callback(rows)
     })
+  })
+
+  socket.on("receive-not-room-member", (data,callback) => {
+    pool.query(`
+      select user_table.id, user_table.name, picture_table.path as picture from user_table
+      join picture_table on user_table.image = picture_table.id
+      where user_table.id not in (
+        select user_table.id from user_table
+        join user_chatroom_unit on user_id = user_table.id
+        where chatroom_id = $1
+      );
+    `, [data.id])
+    .then((res) => {
+      var rows = (res.rows).map(function(row){
+        var r = row;
+        r.picture = getImage(r.picture);
+        return r;
+      });
+      callback(rows);
+    })
+    .catch((err) => {
+      callback({message: "エラーが発生しました。"});
+    });
+  });
+
+  socket.on("add-user-into-room", (data, callback) => {
+    console.log(data);
+    pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2);", [data.user_id, data.room_id])
+    .then((res) => {
+      callback({message: "SUCCESS: from add-user-into-room"});
+    })
+    .catch((err) => {
+      console.log(err);
+      callback({message: "ERROR: from add-user-into-room"});
+    });
+    
+  })
+
+  socket.on("remove-user-from-room", (data, callback) => {
+    console.log(data);
+    pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [data.user_id, data.room_id])
+    .then((res) => {
+      callback({message: "SUCCESS: remove-user-from-room"});
+    })
+    .catch((err) => {
+      console.log(err);
+      callback({message: "ERROR: remove-user-from-room"});
+    });
   })
 
   socket.on('create-room', (data,callback) => {
