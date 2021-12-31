@@ -6,7 +6,7 @@ create table picture_table(
     id      serial not null,
     label   varchar(32) not null,
     path    varchar(256) not null,
-    period  timestamp,
+    -- period  timestamp,
     primary key(id)
 );
 
@@ -15,7 +15,7 @@ create table user_table(
     name        varchar(32) not null,
     password    bytea not null,
     image       integer not null references picture_table(id),
-    mail        bytea not null,
+    -- mail        bytea not null,
     primary key(id)
 );
 
@@ -23,10 +23,10 @@ create table chatroom (
     id      serial not null,
     icon    integer not null references picture_table(id),
     name    varchar(32) not null,
-    openLevel integer not null DEFAULT 3,
-    postLevel integer not null DEFAULT 3,
-    letterNum integer not null DEFAULT 300,
-    term    integer,
+    -- openLevel integer not null DEFAULT 3,
+    -- postLevel integer not null DEFAULT 3,
+    -- letterNum integer not null DEFAULT 300,
+    -- term    integer,
     primary key(id)
 );
 
@@ -37,14 +37,14 @@ create table tweet (
     time    timestamp not null DEFAULT now(),
     user_id varchar(16) not null references user_table(id),
     picture_id integer references picture_table(id),
-    period  timestamp,
+    -- period  timestamp,
     primary key(id)
 );
 
 create table user_chatroom_unit (
     user_id     varchar(16) not null references user_table(id),
     chatroom_id integer not null references chatroom(id),
-    authority   boolean not null DEFAULT TRUE,
+    -- authority   boolean not null DEFAULT TRUE,
     primary key(user_id,chatroom_id)
 );
 
