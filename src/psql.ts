@@ -10,6 +10,7 @@ const pool_data = {
 }
 const pool = new Pool(pool_data);
 
+import { getImage } from "./system";
 
 /**
  * PostgreSQL上に部屋を作成して任意のユーザーを登録する関数。
@@ -45,6 +46,18 @@ function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: s
     }else if(typeof(callback)=="function"){
       callback.json({message: "erro"});
     }
+  });
+}
+
+function createUserRoomWithPicture(chatroom_name: string, user_id: string, picture_label: string, picture_path: string, callback: any){
+  pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
+  .then((res) => {
+    // createUserRoom(user_id, user_name, user_password, res.rows[0].id, response);
+    createUserRoom(res.rows[0].id, chatroom_name, user_id, callback);
+  })
+  .catch((err) => {
+    // response.json({message: "部屋の画像の登録に失敗しました。"});
+    callback({message: "部屋の画像の登録に失敗しました。"});
   });
 }
 
@@ -120,4 +133,117 @@ function addUserWithPicture(user_id: string, user_name: string, user_password: s
     });
 }
 
-export {addUserIntoRoom, removeUserFromRoom, addUser, addUserWithPicture, createUserRoom}
+function selectAllRoom(callback: Function){
+  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id;")
+  .then((res) => {
+    var rows = (res.rows).map(function(row){
+      var r = row;
+      r.picture = getImage(r.picture);
+      return r;
+    });
+    callback({data: rows});
+  })
+  .catch((err) => {
+    callback({message: "roomを取得できませんでした。"});
+  });
+}
+
+function selectRoom(user_id: string, callback: Function){
+  pool.query(`
+  SELECT chatroom.id, chatroom.name, picture_table.path AS picture
+  FROM chatroom
+  JOIN user_chatroom_unit on user_chatroom_unit.chatroom_id = chatroom.id
+  JOIN picture_table ON picture_table.id = chatroom.icon
+  WHERE user_chatroom_unit.user_id = $1;
+  `
+  , [user_id])
+  .then((res) => {
+    var rows = (res.rows).map(function(row){
+      var r = row;
+      r.picture = getImage(r.picture);
+      return r;
+    });
+    callback({data: rows});
+  })
+  .catch((err) => {
+    callback({message: "roomを取得できませんでした。"});
+  });
+}
+
+function deleteRoom(room_id: number, callback: Function){
+  pool.query("DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;", [room_id])
+  .then((res) => {
+    pool.query("DELETE FROM chatroom WHERE (id)=($1);", [room_id])
+    .then((re) => {
+      pool.query("DELETE FROM tweet WHERE room_id=$1;", [room_id])
+      .then((r) => {
+        callback({message: "delete fromに成功しました"});
+      })
+      .catch((e) => {
+        callback({message: "delete fromに失敗しました3"});
+      })
+    })
+    .catch((er) => {
+      callback({message: "delete from に失敗しました1"});
+    })
+  })
+  .catch((err) => {
+    callback({message: "delete from に失敗しました。2"});
+  })
+}
+
+function selectAllUser(callback: Function){
+  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
+  .then((res) => {
+    var rows = (res.rows).map(function(row){
+      var r = row;
+      r.picture = getImage(r.picture);
+      return r;
+    });
+    callback({data: rows});
+  })
+  .catch((err) => {
+    callback({message: "取得に失敗しました。"});
+  })
+}
+
+function deleteUser(user_id: string, callback: Function){
+  pool.query("DELETE FROM user_chatroom_unit WHERE (user_id)=($1);", [user_id])
+  .then((resp) =>{
+    pool.query("DELETE FROM user_table WHERE id=$1 RETURNING *;", [user_id])
+    .then((res) => {
+      callback({message: "ユーザーを削除しました。"});
+      // pool.query("DELETE FROM picture_table WHERE id=$1 RETURNING *;", [res.rows[0].image])
+      // .then((re) => {
+      //   console.log('re:', re);
+      //   console.log({message: "ユーザーを削除しました。"});
+      // })
+      // .catch((er) => {
+      //   console.log(er);
+      //   console.log('えらー１');
+      // })
+    })
+    .catch((err) => {
+      console.log(err);
+      callback({message: 'えらー２'});
+    })
+  })
+  .catch((error) => {
+    console.log(error);
+    callback({message: 'えらー３'});
+  })
+}
+
+export {
+  addUserIntoRoom,
+  removeUserFromRoom,
+  addUser,
+  addUserWithPicture,
+  createUserRoom,
+  createUserRoomWithPicture,
+  deleteRoom,
+  selectAllUser,
+  deleteUser,
+  selectAllRoom,
+  selectRoom
+}

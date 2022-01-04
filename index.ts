@@ -5,7 +5,21 @@ const app = express();
 const fs = require('fs')
 const {randomBytes} = require('crypto')
 
-import { addUser, addUserIntoRoom, addUserWithPicture, createUserRoom, removeUserFromRoom } from "./src/psql";
+import { 
+  addUser, 
+  addUserIntoRoom, 
+  addUserWithPicture, 
+  createUserRoom, 
+  createUserRoomWithPicture, 
+  removeUserFromRoom, 
+  deleteRoom, 
+  selectAllUser, 
+  deleteUser,
+  selectAllRoom,
+  selectRoom
+} from "./src/psql";
+
+import { getImage, setImage, isExisted } from "./src/system";
 
 // socket.io
 const host = 'localhost'; //'192.168.0.19';
@@ -200,14 +214,14 @@ io.on('connection', socket => {
 
   socket.on('call-room-list', (data, callback) => {
     pool.query(`
-      select chatroom.id,chatroom.name,picture_table.path,user_chatroom_unit.user_id from chatroom
+      select chatroom.id,chatroom.name,picture_table.path AS picture,user_chatroom_unit.user_id from chatroom
       join picture_table on chatroom.icon = picture_table.id
       join user_chatroom_unit on chatroom.id = user_chatroom_unit.chatroom_id
       where user_chatroom_unit.user_id = $1;
     `, [data.user_id], (err, res) => {
         var room = (res.rows).map(function(row){
           var r = row
-          r.path = getImage(r.path)
+          r.picture = getImage(r.picture)
           return r
         })
         callback({rows: room})
@@ -254,6 +268,22 @@ io.on('connection', socket => {
     });
   });
 
+  socket.on("receive-chatroom-with-picture", (data, callback) => {
+    pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND A.id=$1;", [data.room_id])
+    .then((res) => {
+      var rows = (res.rows).map(function(row){
+        var r = row;
+        r.picture = getImage(r.picture);
+        return r;
+      });
+      callback(rows);
+    })
+    .catch((err) => {
+      console.log(err);
+      callback({message: "エラーが発生しました。"});
+    })
+  });
+
   socket.on("add-user-into-room", (data, callback) => {
     console.log(data);
     addUserIntoRoom(data.user_id, data.room_id, callback);
@@ -265,8 +295,45 @@ io.on('connection', socket => {
   })
 
   socket.on('create-room', (data,callback) => {
-    createUserRoom(1, data.roomName, data.userId, callback);
+    console.log(data);
+    if(data.picture.data){
+      var path = `./${ picture_directory }/${generateRandomString(12)}.png`
+      while(isExisted(path)){
+        path = `./${ picture_directory }/${generateRandomString(12)}.png`
+      }
+      fs.writeFileSync(path, setImage(data.picture), 'base64');
+      // addUserWithPicture(data.user_id, data.user_name, data.password1, '練習用のラベル', path, response);
+      createUserRoomWithPicture(data.roomName, data.userId, '部屋の画像ラベル', path, callback);
+    }else{
+      // addUser(data.user_id, data.user_name, data.password1, 1, response);
+      createUserRoom(1, data.roomName, data.userId, callback);
+    }
   });
+
+  socket.on('select-all-room', (data, callback) => {
+    console.log('select all room.\n', data);
+    selectAllRoom(callback);
+  });
+
+  socket.on('select-room', (data, callback) => {
+    console.log('select room.\n', data);
+    selectRoom(data.user_id, callback);
+  })
+
+  socket.on('delete-room', (data, callback) => {
+    console.log('delete room.\n', data);
+    deleteRoom(data.room_id, callback);
+  });
+
+  socket.on('select-all-user', (data, callback) => {
+    console.log('select all user.\n', data);
+    selectAllUser(callback);
+  });
+
+  socket.on('delete-user', (data, callback) => {
+    console.log('delete user.\n', data);
+    deleteUser(data.user_id, callback);
+  })
 
   socket.on('receive-picture', (data, callback) => {
     var matches = String(data.binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
@@ -283,44 +350,13 @@ io.on('connection', socket => {
     })
   })
 
-  function getImage(path){
-    const data = fs.readFileSync(path)
-    return "data:image;base64,"+ data.toString("base64")
-  }
-
-  function setImage(binary){
-    var matches = String(binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
-    var response = {
-      type: matches[1],
-      data: Buffer.from(matches[2], 'base64')
-    }
-    return response.data
-  }
-
   function generateRandomString(length) {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
-  }
-
-  function isExisted(file) {
-    return fs.existsSync(file)
   }
 });
 
 function generateRandomString(length) {
   return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '');
-}
-
-function isExisted(file) {
-  return fs.existsSync(file);
-}
-
-function setImage(binary){
-  var matches = String(binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
-  var response = {
-    type: matches[1],
-    data: Buffer.from(matches[2], 'base64')
-  }
-  return response.data
 }
 
 // expressで静的ページにアクセスする.
