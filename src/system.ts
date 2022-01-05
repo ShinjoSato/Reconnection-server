@@ -14,8 +14,14 @@ function setImage(binary){
     return response.data;
 }
 
+function saveImage(path: string, picture: any){
+    console.log('save image.');
+    console.log(path);
+    fs.writeFileSync(path, setImage(picture), 'base64');
+}
+
 function isExisted(file) {
     return fs.existsSync(file);
 }
 
-export {getImage, setImage, isExisted}
+export {getImage, setImage, saveImage, isExisted}

@@ -10,7 +10,7 @@ const pool_data = {
 }
 const pool = new Pool(pool_data);
 
-import { getImage } from "./system";
+import { getImage, saveImage } from "./system";
 
 /**
  * PostgreSQL上に部屋を作成して任意のユーザーを登録する関数。
@@ -170,6 +170,34 @@ function selectRoom(user_id: string, callback: Function){
   });
 }
 
+function updateRoom(id: number, name: string, picture: any, callback: Function){
+  pool.query("UPDATE chatroom SET name = $1 WHERE id = $2 RETURNING *;", [name, id])
+  .then((res) => {
+    if(res.rows.length==1){
+      callback({message: "update room success"})
+      if(picture){
+        pool.query("SELECT picture_table.path AS path FROM chatroom JOIN picture_table ON picture_table.id = chatroom.icon WHERE chatroom.icon = $1;", [res.rows[0].icon])
+        .then((r) => {
+          saveImage(r.rows[0].path, picture);
+          callback({message: '画像も更新したupdate room.'});
+        })
+        .catch((e) => {
+          console.log(e);
+          callback({message: "画像を更新する時にエラーupdate room."});
+        })
+      }else{
+        callback({message: "update room success"});
+      }
+    }else{
+      callback({message: "error update room"});
+    }
+  })
+  .catch((err) => {
+    console.log(err);
+    callback({message: "cannnot update room"});
+  })
+}
+
 function deleteRoom(room_id: number, callback: Function){
   pool.query("DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;", [room_id])
   .then((res) => {
@@ -204,6 +232,40 @@ function selectAllUser(callback: Function){
   })
   .catch((err) => {
     callback({message: "取得に失敗しました。"});
+  })
+}
+
+function updateUser(id: string, name: string, picture: any, password: string, email: string, callback: Function){
+  pool.query("SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;", [id, password])
+  .then((res) => {
+    if(res.rows.length==1){
+      pool.query("UPDATE user_table SET name = $1 WHERE id = $2 RETURNING *;", [name, id])
+      .then((resp) => {
+        if(picture){
+          pool.query("SELECT picture_table.path AS path FROM user_table JOIN picture_table ON picture_table.id = user_table.image WHERE user_table.id = $1;", [id])
+          .then((r) => {
+            saveImage(r.rows[0].path, picture);
+            callback({message: '画像も更新させられましてuser update'})
+          })
+          .catch((e) => {
+            console.log(e);
+            callback({message: '画像を読み込ませるときにエラー'})
+          })
+        }else{
+          callback({message: "画像なしupdateに成功しました"})
+        }
+      })
+      .catch((erro) => {
+        console.log(erro);
+        callback({message: "updateに失敗しました。"})
+      })
+    }else{
+      callback({message: "一致するユーザーがいません。"})
+    }
+  })
+  .catch((err) => {
+    console.log(err);
+    callback({message: "error from update user."});
   })
 }
 
@@ -243,7 +305,9 @@ export {
   createUserRoomWithPicture,
   deleteRoom,
   selectAllUser,
+  updateUser,
   deleteUser,
   selectAllRoom,
-  selectRoom
+  selectRoom,
+  updateRoom
 }

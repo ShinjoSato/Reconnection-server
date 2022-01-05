@@ -13,10 +13,12 @@ import {
   createUserRoomWithPicture, 
   removeUserFromRoom, 
   deleteRoom, 
-  selectAllUser, 
+  selectAllUser,
+  updateUser,
   deleteUser,
   selectAllRoom,
-  selectRoom
+  selectRoom,
+  updateRoom
 } from "./src/psql";
 
 import { getImage, setImage, isExisted } from "./src/system";
@@ -320,14 +322,24 @@ io.on('connection', socket => {
     selectRoom(data.user_id, callback);
   })
 
+  socket.on('update-room', (data, callback) => {
+    console.log('update room.');
+    updateRoom(data.id, data.name, data.picture, callback);
+  })
+
   socket.on('delete-room', (data, callback) => {
     console.log('delete room.\n', data);
     deleteRoom(data.room_id, callback);
   });
 
   socket.on('select-all-user', (data, callback) => {
-    console.log('select all user.\n', data);
+    console.log('select all user.');
     selectAllUser(callback);
+  });
+
+  socket.on('update-user', (data, callback) => {
+    console.log('update user.');
+    updateUser(data.id, data.name, data.picture, data.password, data.email, callback);
   });
 
   socket.on('delete-user', (data, callback) => {
