@@ -19,8 +19,8 @@ import { getImage, saveImage } from "./system";
  * @param user_id テーブル名user_tableのカラムid。
  * @param callback 取得したデータを返すFuncstionまたはObject。
  */
-function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: string, callback: any){
-  pool.query("INSERT INTO chatroom(icon,name) VALUES($1,$2) RETURNING *;",[chatroom_icon, chatroom_name])
+function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: string, open_level: number, post_level: number, callback: any){
+  pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES($1,$2,$3,$4) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level])
   .then(re=>{
     pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2) RETURNING *;",[user_id, re.rows[0].id])
     .then(r=>{
@@ -49,14 +49,12 @@ function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: s
   });
 }
 
-function createUserRoomWithPicture(chatroom_name: string, user_id: string, picture_label: string, picture_path: string, callback: any){
+function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string, callback: any){
   pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
   .then((res) => {
-    // createUserRoom(user_id, user_name, user_password, res.rows[0].id, response);
-    createUserRoom(res.rows[0].id, chatroom_name, user_id, callback);
+    createUserRoom(res.rows[0].id, chatroom_name, user_id, open_level, post_level, callback);
   })
   .catch((err) => {
-    // response.json({message: "部屋の画像の登録に失敗しました。"});
     callback({message: "部屋の画像の登録に失敗しました。"});
   });
 }
@@ -104,10 +102,10 @@ function removeUserFromRoom(user_id: string, room_id: number, callback: Function
  * @param picture_id 画像id。
  * @param response 結果を返信する関数。
  */
-function addUser(id: string, name: string, password: string, picture_id: number, response: any){
-    pool.query("insert into user_table(id,name,password,image) values($1,$2,pgp_sym_encrypt($3,'password'),$4) returning *;", [id, name, password, picture_id])
+function addUser(id: string, name: string, password: string, picture_id: number, mail: string, authority: boolean, response: any){
+    pool.query("insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;", [id, name, password, picture_id, mail, authority])
     .then((res) => {
-      createUserRoom(res.rows[0].image, res.rows[0].name, res.rows[0].id, response);
+      createUserRoom(res.rows[0].image, res.rows[0].name, res.rows[0].id, 1, 1, response);
     })
     .catch((err) => {
       response.json({message: "画像なしでユーザーの登録に失敗しました。"});
@@ -123,10 +121,10 @@ function addUser(id: string, name: string, password: string, picture_id: number,
  * @param picture_path 画像までのディレクトリーパス。
  * @param response 結果を返信する関数。
  */
-function addUserWithPicture(user_id: string, user_name: string, user_password: string, picture_label: string, picture_path: string, response: any){
+function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
     pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
     .then((res) => {
-        addUser(user_id, user_name, user_password, res.rows[0].id, response);
+        addUser(user_id, user_name, user_password, res.rows[0].id, user_mail, user_authority, response);
     })
     .catch((err) => {
       response.json({message: "ユーザーの画像の登録に失敗しました。"});
@@ -170,8 +168,8 @@ function selectRoom(user_id: string, callback: Function){
   });
 }
 
-function updateRoom(id: number, name: string, picture: any, callback: Function){
-  pool.query("UPDATE chatroom SET name = $1 WHERE id = $2 RETURNING *;", [name, id])
+function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, callback: Function){
+  pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then((res) => {
     if(res.rows.length==1){
       callback({message: "update room success"})
@@ -221,7 +219,7 @@ function deleteRoom(room_id: number, callback: Function){
 }
 
 function selectAllUser(callback: Function){
-  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
+  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
   .then((res) => {
     var rows = (res.rows).map(function(row){
       var r = row;
@@ -235,11 +233,11 @@ function selectAllUser(callback: Function){
   })
 }
 
-function updateUser(id: string, name: string, picture: any, password: string, email: string, callback: Function){
+function updateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, callback: Function){
   pool.query("SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;", [id, password])
   .then((res) => {
     if(res.rows.length==1){
-      pool.query("UPDATE user_table SET name = $1 WHERE id = $2 RETURNING *;", [name, id])
+      pool.query("UPDATE user_table SET (name,mail,authority) = ($1,$2,$3) WHERE id = $4 RETURNING *;", [name, mail, authority, id])
       .then((resp) => {
         if(picture){
           pool.query("SELECT picture_table.path AS path FROM user_table JOIN picture_table ON picture_table.id = user_table.image WHERE user_table.id = $1;", [id])
@@ -272,22 +270,29 @@ function updateUser(id: string, name: string, picture: any, password: string, em
 function deleteUser(user_id: string, callback: Function){
   pool.query("DELETE FROM user_chatroom_unit WHERE (user_id)=($1);", [user_id])
   .then((resp) =>{
-    pool.query("DELETE FROM user_table WHERE id=$1 RETURNING *;", [user_id])
-    .then((res) => {
-      callback({message: "ユーザーを削除しました。"});
-      // pool.query("DELETE FROM picture_table WHERE id=$1 RETURNING *;", [res.rows[0].image])
-      // .then((re) => {
-      //   console.log('re:', re);
-      //   console.log({message: "ユーザーを削除しました。"});
-      // })
-      // .catch((er) => {
-      //   console.log(er);
-      //   console.log('えらー１');
-      // })
+    pool.query("DELETE FROM tweet WHERE (user_id)=($1);", [user_id])
+    .then((response) => {
+      pool.query("DELETE FROM user_table WHERE id=$1 RETURNING *;", [user_id])
+      .then((res) => {
+        callback({message: "ユーザーを削除しました。"});
+        // pool.query("DELETE FROM picture_table WHERE id=$1 RETURNING *;", [res.rows[0].image])
+        // .then((re) => {
+        //   console.log('re:', re);
+        //   console.log({message: "ユーザーを削除しました。"});
+        // })
+        // .catch((er) => {
+        //   console.log(er);
+        //   console.log('えらー１');
+        // })
+      })
+      .catch((err) => {
+        console.log(err);
+        callback({message: 'えらー２'});
+      })
     })
-    .catch((err) => {
-      console.log(err);
-      callback({message: 'えらー２'});
+    .catch((errr) => {
+      console.log(errr);
+      callback({message: 'えらー４'})
     })
   })
   .catch((error) => {

@@ -79,12 +79,7 @@ io.on('connection', socket => {
   socket.on('connect-to-server', (data, callback) => {
     const tmp_pool = new Pool(pool_data)
     tmp_pool.connect().then(client => {
-      pool.query(`
-        select usrt.id as id, usrt.name as name, pict.path as image from user_table as usrt
-        join picture_table as pict on pict.id = usrt.image
-        where usrt.id = $1
-        and pgp_sym_decrypt(usrt.password, 'password') = $2;
-      `, [data.userId, data.password], (err, res) => {
+      pool.query("select A.id as id, A.name as name, A.mail AS mail, A.authority AS authority, B.path as image from user_table as A join picture_table as B on B.id = A.image where A.id = $1 and pgp_sym_decrypt(A.password, 'password') = $2;", [data.userId, data.password], (err, res) => {
         var user = (res.rows).map(function(row){
           var r = row
           r.image = getImage(r.image)
@@ -271,7 +266,7 @@ io.on('connection', socket => {
   });
 
   socket.on("receive-chatroom-with-picture", (data, callback) => {
-    pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND A.id=$1;", [data.room_id])
+    pool.query("SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND A.id=$1;", [data.room_id])
     .then((res) => {
       var rows = (res.rows).map(function(row){
         var r = row;
@@ -298,17 +293,15 @@ io.on('connection', socket => {
 
   socket.on('create-room', (data,callback) => {
     console.log(data);
-    if(data.picture.data){
+    if(data.picture){
       var path = `./${ picture_directory }/${generateRandomString(12)}.png`
       while(isExisted(path)){
         path = `./${ picture_directory }/${generateRandomString(12)}.png`
       }
       fs.writeFileSync(path, setImage(data.picture), 'base64');
-      // addUserWithPicture(data.user_id, data.user_name, data.password1, '練習用のラベル', path, response);
-      createUserRoomWithPicture(data.roomName, data.userId, '部屋の画像ラベル', path, callback);
+      createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル', path, callback);
     }else{
-      // addUser(data.user_id, data.user_name, data.password1, 1, response);
-      createUserRoom(1, data.roomName, data.userId, callback);
+      createUserRoom(1, data.roomName, data.userId, data.open_level, data.post_level, callback);
     }
   });
 
@@ -324,7 +317,7 @@ io.on('connection', socket => {
 
   socket.on('update-room', (data, callback) => {
     console.log('update room.');
-    updateRoom(data.id, data.name, data.picture, callback);
+    updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, callback);
   })
 
   socket.on('delete-room', (data, callback) => {
@@ -339,27 +332,12 @@ io.on('connection', socket => {
 
   socket.on('update-user', (data, callback) => {
     console.log('update user.');
-    updateUser(data.id, data.name, data.picture, data.password, data.email, callback);
+    updateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority, callback);
   });
 
   socket.on('delete-user', (data, callback) => {
     console.log('delete user.\n', data);
     deleteUser(data.user_id, callback);
-  })
-
-  socket.on('receive-picture', (data, callback) => {
-    var matches = String(data.binary).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
-    var response = {
-      type: matches[1],
-      data: Buffer.from(matches[2], 'base64')
-    }
-    fs.writeFile(`${ picture_directory }/temporary.png`, response.data, 'base64', function(err) {
-      if(err){
-        callback(`couldn't save the image.`)
-      }else{
-        callback('receive picture success!')
-      }
-    })
   })
 
   function generateRandomString(length) {
@@ -397,9 +375,9 @@ app.post("/sign-on/check", function (request, response) {
       path = `./${ picture_directory }/${generateRandomString(12)}.png`
     }
     fs.writeFileSync(path, setImage(data.picture), 'base64');
-    addUserWithPicture(data.user_id, data.user_name, data.password1, '練習用のラベル', path, response);
+    addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル', path, response);
     
   }else{
-    addUser(data.user_id, data.user_name, data.password1, 1, response);
+    addUser(data.user_id, data.user_name, data.password1, 1, data.mail, data.authority, response);
   }
 });

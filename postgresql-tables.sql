@@ -15,7 +15,8 @@ create table user_table(
     name        varchar(32) not null,
     password    bytea not null,
     image       integer not null references picture_table(id),
-    -- mail        text not null
+    mail        text not null,
+    authority   boolean not null DEFAULT TRUE,
     primary key(id)
 );
 
@@ -23,8 +24,8 @@ create table chatroom (
     id      serial not null,
     icon    integer not null references picture_table(id),
     name    varchar(32) not null,
-    -- openLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定公開, 3: 全体公開
-    -- postLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定投稿, 3: 全体投稿
+    openLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定公開, 3: 全体公開
+    postLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定投稿, 3: 全体投稿
     -- letterNum integer not null DEFAULT 300, -- 300: 300文字以下, 500: 500文字以下, 0: 制限無し
     -- term    integer, -- 1: 1カ月以内, 6: 半年以内, 12: 一年以内, 0: 制限無し
     primary key(id)
@@ -44,7 +45,9 @@ create table tweet (
 create table user_chatroom_unit (
     user_id     varchar(16) not null references user_table(id),
     chatroom_id integer not null references chatroom(id),
-    -- authority   boolean not null DEFAULT TRUE,
+    authority   boolean not null DEFAULT TRUE,
+    opening     boolean not null DEFAULT TRUE,
+    posting     boolean not null DEFAULT TRUE,
     primary key(user_id,chatroom_id)
 );
 
@@ -117,3 +120,12 @@ order by tweet.id;
 select * from user_table
 join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
 where user_chatroom_unit.chatroom_id = 4;
+
+-- 追加事項
+alter table user_table add column mail text not null DEFAULT 'dummy@dummy';
+alter table user_table add column authority boolean not null DEFAULT TRUE;
+alter table chatroom add openLevel integer not null DEFAULT 3;
+alter table chatroom add postLevel integer not null DEFAULT 3;
+alter table user_chatroom_unit add column authority boolean not null DEFAULT TRUE;
+alter table user_chatroom_unit add column opening boolean not null DEFAULT TRUE;
+alter table user_chatroom_unit add column posting boolean not null DEFAULT TRUE;
