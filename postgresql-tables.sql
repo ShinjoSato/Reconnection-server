@@ -38,6 +38,7 @@ create table tweet (
     time    timestamp not null DEFAULT now(),
     user_id varchar(16) not null references user_table(id),
     picture_id integer references picture_table(id),
+    head    integer DEFAULT null,
     -- period  timestamp,
     primary key(id)
 );
@@ -129,3 +130,4 @@ alter table chatroom add postLevel integer not null DEFAULT 3;
 alter table user_chatroom_unit add column authority boolean not null DEFAULT TRUE;
 alter table user_chatroom_unit add column opening boolean not null DEFAULT TRUE;
 alter table user_chatroom_unit add column posting boolean not null DEFAULT TRUE;
+alter table tweet add column head integer DEFAULT null;

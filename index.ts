@@ -116,9 +116,9 @@ io.on('connection', socket => {
           values($1,$2) returning *;
         `, ['練習用のラベル', path], (error, res) => {
           pool.query(`
-            insert into tweet(tweet,room_id,user_id,picture_id)
-            values($1,$2,$3,$4) returning *;
-          `, [data.text, data.room, data.user, res.rows[0].id], (error, res) => {
+            insert into tweet(tweet,room_id,user_id,picture_id,head)
+            values($1,$2,$3,$4,$5) returning *;
+          `, [data.text, data.room, data.user, res.rows[0].id, data.head], (error, res) => {
             console.log('* to の確認 with picture*:',{rows: res.rows}, '\nCHATROOM:',CHATROOM)
             for(const room of ALLROOM){
               if(room == CHATROOM){
@@ -136,9 +136,9 @@ io.on('connection', socket => {
     }else{
       // Without pictures
       pool.query(`
-        insert into tweet(tweet,room_id,user_id)
-        values($1,$2,$3) returning *;
-      `, [data.text, data.room, data.user], (error, res) => {
+        insert into tweet(tweet,room_id,user_id,head)
+        values($1,$2,$3,$4) returning *;
+      `, [data.text, data.room, data.user, data.head], (error, res) => {
         for(const room of ALLROOM){
           if(room == CHATROOM){
             console.log('呟きを送る')
@@ -167,7 +167,7 @@ io.on('connection', socket => {
 
   socket.on('check-in-room', (data, callback) => {
     pool.query(`
-      select tweet.id, tweet, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
+      select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
       join (
           select user_table.id,user_table.name,picture_table.path from user_table
           join picture_table on user_table.image = picture_table.id
@@ -193,7 +193,7 @@ io.on('connection', socket => {
 
   socket.on('new-message', (data, callback) => {
     pool.query(`
-      select tweet.id,tweet,tweet.time, user_table.name as user,user_table.path as user_icon from tweet
+      select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.path as user_icon from tweet
       join (
           select user_table.id,user_table.name,picture_table.path from user_table
           join picture_table on user_table.image = picture_table.id
