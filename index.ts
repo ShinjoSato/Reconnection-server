@@ -18,7 +18,8 @@ import {
   deleteUser,
   selectAllRoom,
   selectRoom,
-  updateRoom
+  updateRoom,
+  selectTweetWithPic
 } from "./src/psql";
 
 import { getImage, setImage, isExisted } from "./src/system";
@@ -338,6 +339,11 @@ io.on('connection', socket => {
   socket.on('delete-user', (data, callback) => {
     console.log('delete user.\n', data);
     deleteUser(data.user_id, callback);
+  })
+
+  socket.on('select-tweet-with-pic', (data, callback) => {
+    console.log('select tweet with pict', data);
+    selectTweetWithPic(data.room_id, callback);
   })
 
   function generateRandomString(length) {
