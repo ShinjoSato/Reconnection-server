@@ -14,6 +14,7 @@ import {
   removeUserFromRoom, 
   deleteRoom, 
   selectAllUser,
+  selectUsersInRoom,
   updateUser,
   deleteUser,
   selectAllRoom,
@@ -329,6 +330,11 @@ io.on('connection', socket => {
   socket.on('select-all-user', (data, callback) => {
     console.log('select all user.');
     selectAllUser(callback);
+  });
+
+  socket.on('select-users-in-room', (data, callback) => {
+    console.log('select users in room.');
+    selectUsersInRoom(data.room_id, callback);
   });
 
   socket.on('update-user', (data, callback) => {

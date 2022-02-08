@@ -233,6 +233,27 @@ function selectAllUser(callback: Function){
   })
 }
 
+function selectUsersInRoom(room_id: string, callback: Function){
+  pool.query(`
+  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
+  JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+  JOIN picture_table ON picture_table.id = user_table.image
+  WHERE user_chatroom_unit.chatroom_id = $1;
+  `, [room_id])
+  .then((response) => {
+    var users = (response.rows).map(function(row){
+      var r = row;
+      r.picture = getImage(r.picture);
+      return r;
+    });
+    callback({rows: users});
+  })
+  .catch((error) => {
+    console.log(error);
+    callback({message: "エラーが発生しました。"});
+  })
+}
+
 function updateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, callback: Function){
   pool.query("SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;", [id, password])
   .then((res) => {
@@ -338,6 +359,7 @@ export {
   createUserRoomWithPicture,
   deleteRoom,
   selectAllUser,
+  selectUsersInRoom,
   updateUser,
   deleteUser,
   selectAllRoom,
