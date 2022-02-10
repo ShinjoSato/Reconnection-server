@@ -228,20 +228,9 @@ io.on('connection', socket => {
     })
   })
 
-  socket.on('receive-room-member', (data,callback) => {
-    pool.query(`
-      select user_table.id, user_table.name, picture_table.path as picture from user_table
-      join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
-      join picture_table on user_table.image = picture_table.id
-      where user_chatroom_unit.chatroom_id = $1;
-    `, [data.id], (err, res) => {
-      var rows = (res.rows).map(function(row){
-        var r = row
-        r.picture = getImage(r.picture)
-        return r
-      })
-      callback(rows)
-    })
+  socket.on('receive-room-member', (data, callback) => {
+    console.log("receive room member.");
+    selectUsersInRoom(data.id, callback);
   })
 
   socket.on("receive-not-room-member", (data,callback) => {

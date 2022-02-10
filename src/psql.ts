@@ -235,7 +235,7 @@ function selectAllUser(callback: Function){
 
 function selectUsersInRoom(room_id: string, callback: Function){
   pool.query(`
-  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
+  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
   JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
   WHERE user_chatroom_unit.chatroom_id = $1;
