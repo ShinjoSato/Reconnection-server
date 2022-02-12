@@ -322,34 +322,6 @@ function deleteUser(user_id: string, callback: Function){
   })
 }
 
-function selectTweetWithPic(room_id: number, callback: Function){
-  console.log('select tweet with pic:', room_id);
-  pool.query(`
-  select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
-  join (
-      select user_table.id,user_table.name,picture_table.path from user_table
-      join picture_table on user_table.image = picture_table.id
-  ) as user_table on tweet.user_id = user_table.id
-  left join picture_table on tweet.picture_id = picture_table.id
-  where room_id = $1
-  AND tweet.picture_id is not null
-  order by tweet.id desc;
-`, [room_id])
-  .then((response) => {
-    var tweet = (response.rows).map(function(row){
-      var r = row;
-      r.user_icon = getImage(r.user_icon);
-      r.picture = getImage(r.picture);
-      return r;
-    });
-    callback({rows: tweet});
-  })
-  .catch((error) => {
-    console.log(error);
-    callback({message: "エラー"});
-  })
-}
-
 export {
   addUserIntoRoom,
   removeUserFromRoom,
@@ -365,5 +337,4 @@ export {
   selectAllRoom,
   selectRoom,
   updateRoom,
-  selectTweetWithPic
 }
