@@ -1,0 +1,37 @@
+version: '3.2'
+
+services:
+  disconnected:
+    depends_on:
+      - rdb
+    image: disconnected-server
+    networks:
+      - disconnected-net
+    volumes:
+      - type: bind
+        source: /home/ec2-user/images
+        target: /tmp_images
+    ports:
+      - 18000:8000
+    restart: always
+  
+  rdb:
+    image: disconnected-db
+    networks:
+      - disconnected-net
+    volumes:
+      - type: volume
+        source: sample_strage
+        target: /var/lib/postgresql/data
+    ports:
+      - 15432:5432
+    restart: always
+    environment:
+      - POSTGRES_USER:postgres
+      - POSTGRES_PASSWORD:password
+
+networks:
+  disconnected-net:
+
+volumes:
+  sample_strage:

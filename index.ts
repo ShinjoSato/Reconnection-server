@@ -25,7 +25,7 @@ import {
 import { getImage, setImage, isExisted } from "./src/system";
 
 // socket.io
-const host = 'localhost'; //'192.168.0.19';
+const host = 'localhost'; //'172.31.44.151';
 const port = 8000;
 const server = http.createServer(app).listen(port, host, () => {
   console.log('server start. port=' + port);
@@ -46,7 +46,7 @@ const pool_data = {
   host: 'localhost',
   database: 'postgres',
   password: 'password',
-  port: 5432
+  port: 5432 //15432
 }
 const pool = new Pool(pool_data)
 
@@ -54,19 +54,7 @@ const pool = new Pool(pool_data)
 // const picture_directory = '/tmp_images'
 const picture_directory = 'images'
 
-let CHATROOM = null
-let ALLROOM = []
-
-// console.log(pool)
-pool.query(`select * from chatroom;`, (err, res) => {
-  console.log('err:', err)
-  console.log('res:', res)
-  console.log(res.rows)
-  for(const room of res.rows){
-    ALLROOM.push(room.id)
-  }
-})
-
+let CHATROOMS = [];
 
 io.on('connection', socket => {
   console.log('socket.id:' + socket.id);
@@ -138,15 +126,10 @@ io.on('connection', socket => {
                 }
                 return r;
               });
-              console.log('* to の確認 with picture*:',{rows: res.rows}, '\nCHATROOM:',CHATROOM)
-              for(const room of ALLROOM){
-                if(room == CHATROOM){
-                  console.log('呟きを送る')
-                  io.to(CHATROOM).emit('send-update-room', tweet[0])
-                }else{
-                  console.log('通知を送る')
-                  io.to(room).emit('receive-notification', tweet[0])
-                }
+              console.log('* to の確認 with picture*:',{rows: res.rows});
+              if(CHATROOMS.includes(data.room)){
+                console.log('通知を送る');
+                io.to(data.room).emit('receive-notification', tweet[0])
               }
             })
             .catch((error) => {
@@ -181,14 +164,9 @@ io.on('connection', socket => {
             }
             return r;
           });
-          for(const room of ALLROOM){
-            if(room == CHATROOM){
-              console.log('呟きを送る')
-              io.to(room).emit('send-update-room', tweet[0])
-            }else{
-              console.log('通知を送る')
-              io.to(room).emit('receive-notification', tweet[0])
-            }
+          if(CHATROOMS.includes(data.room)){
+            console.log('通知を送る')
+            io.to(data.room).emit('receive-notification', tweet[0])
           }
         })
         .catch((error) => {
@@ -206,9 +184,11 @@ io.on('connection', socket => {
       left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
       where usrroom.user_id = $1;
     `, [data.id], (err, res) => {
-      CHATROOM = res.rows[0].chatroom_id
-      socket.join(CHATROOM)
-      callback({rows: res.rows})
+      for(const val of res.rows){
+        CHATROOMS.push(val.chatroom_id);
+        socket.join(val.chatroom_id);
+      }
+      callback({rows: res.rows});
     })
   })
 
@@ -301,8 +281,6 @@ io.on('connection', socket => {
           WHERE B.user_id = $1;
         `, [data.user_id])
         .then((res) => {
-          CHATROOM = res.rows[0].chatroom_id;
-          socket.join(CHATROOM);
           var rooms = (res.rows).map(function(row){
             var r = row;
             r.picture = getImage(r.picture);
@@ -353,32 +331,6 @@ io.on('connection', socket => {
     })
   })
 
-  socket.on('check-in-room', (data, callback) => {
-    pool.query(`
-      select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
-      join (
-          select user_table.id,user_table.name,picture_table.path from user_table
-          join picture_table on user_table.image = picture_table.id
-      ) as user_table on tweet.user_id = user_table.id
-      left join picture_table on tweet.picture_id = picture_table.id
-      where room_id = $1
-      order by tweet.id desc;
-    `, [data.id], (err, res) => {
-      var tweet = (res.rows).map(function(row){
-        var r = row
-        r.user_icon = getImage(r.user_icon)
-        if(r.picture){
-          r.picture = getImage(r.picture)
-        }
-        return r
-      })
-      socket.leave(CHATROOM)
-      socket.join(data.id)
-      CHATROOM = data.id
-      callback({rows: tweet})
-    })
-  });
-
   socket.on('new-message', (data, callback) => {
     pool.query(`
       select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.path as user_icon from tweet
@@ -421,12 +373,12 @@ io.on('connection', socket => {
 
   socket.on("receive-not-room-member", (data,callback) => {
     pool.query(`
-      select user_table.id, user_table.name, picture_table.path as picture from user_table
-      join picture_table on user_table.image = picture_table.id
-      where user_table.id not in (
-        select user_table.id from user_table
-        join user_chatroom_unit on user_id = user_table.id
-        where chatroom_id = $1
+      SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
+      JOIN picture_table ON user_table.image = picture_table.id
+      WHERE user_table.id NOT IN (
+        SELECT user_table.id FROM user_table
+        JOIN user_chatroom_unit ON user_id = user_table.id
+        WHERE chatroom_id = $1
       );
     `, [data.id])
     .then((res) => {
@@ -460,15 +412,17 @@ io.on('connection', socket => {
 
   socket.on("add-user-into-room", (data, callback) => {
     console.log(data);
-    addUserIntoRoom(data.user_id, data.room_id, callback);
+    addUserIntoRoom(data.user_id, data.room_id, callback, io);
   })
 
   socket.on("remove-user-from-room", (data, callback) => {
     console.log(data);
-    removeUserFromRoom(data.user_id, data.room_id, callback);
+    removeUserFromRoom(data.user_id, data.room_id, callback, io);
+
   })
 
   socket.on('create-room', (data,callback) => {
+    console.log('部屋を作ります。')
     console.log(data);
     if(data.picture){
       var path = `./${ picture_directory }/${generateRandomString(12)}.png`
@@ -478,7 +432,7 @@ io.on('connection', socket => {
       fs.writeFileSync(path, setImage(data.picture), 'base64');
       createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル', path, callback);
     }else{
-      createUserRoom(1, data.roomName, data.userId, data.open_level, data.post_level, callback);
+      createUserRoom(1, './images/default.png', data.roomName, data.userId, data.open_level, data.post_level, callback);
     }
   });
 
@@ -522,6 +476,83 @@ io.on('connection', socket => {
     deleteUser(data.user_id, callback);
   })
 
+  socket.on('log-out', (data, callback) => {
+    console.log('log out.');
+    for(const room of CHATROOMS){
+      socket.leave(room);
+    }
+    CHATROOMS = [];
+    socket.disconnect();
+  })
+
+  /**
+   * 新しい部屋に追加された時に取得するデータ.
+   */
+  socket.on('get-single-room', (data, callback) => {
+    let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
+    pool.query(`SELECT A.*, B.*, C.path AS picture from chatroom AS A
+    LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
+    JOIN picture_table AS C ON C.id = A.icon
+    WHERE B.user_id = $1
+    AND A.id = $2;`, [data.user_id, data.room_id])
+    .then(response => {
+      result.single_room = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+      pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority FROM user_table
+      JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
+      JOIN picture_table ON picture_table.id = user_table.image
+      WHERE B.chatroom_id = $1;`, [data.room_id])
+      .then(response => {
+        result.single_roommember = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+        pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+        JOIN (
+            SELECT user_table.id,user_table.name,picture_table.path FROM user_table
+            JOIN picture_table ON user_table.image = picture_table.id
+        ) AS user_table ON tweet.user_id = user_table.id
+        LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
+        WHERE room_id = $1
+        ORDER BY tweet.id DESC;`, [data.room_id])
+        .then(response => {
+          result.single_tweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+          pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+          JOIN (
+              SELECT user_table.id,user_table.name,picture_table.path FROM user_table
+              JOIN picture_table ON user_table.image = picture_table.id
+          ) AS user_table ON tweet.user_id = user_table.id
+          LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
+          WHERE room_id = $1
+          AND tweet.picture_id IS NOT NULL
+          ORDER BY tweet.id DESC;`, [data.room_id])
+          .then(response => {
+            result.single_pictweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+            callback(result);
+          })
+          .catch(error => {
+            console.log(error);
+            callback({message: '最後にエラーです。'});
+          })
+        })
+        .catch(error => {
+          console.log(error);
+          callback({message: 'エラーです'});
+        })
+      })
+      .catch(error => {
+        console.log(error);
+        callback({message: "エラーが発生しました。"});
+      })
+    })
+    .catch(error => {
+      console.log(error);
+      callback({message: "エラーが生じました。"})
+    })
+  })
+
+  socket.on('enter-new-room', (data, callback) => {
+    CHATROOMS.push(data.room_id);
+    socket.join(data.room_id);
+    callback({message: "新しい部屋に登録されました。"});
+  });
+
   function generateRandomString(length) {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
   }
@@ -560,6 +591,6 @@ app.post("/sign-on/check", function (request, response) {
     addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル', path, response);
     
   }else{
-    addUser(data.user_id, data.user_name, data.password1, 1, data.mail, data.authority, response);
+    addUser(data.user_id, data.user_name, data.password1, 1, './images/default.png', data.mail, data.authority, response);
   }
 });

@@ -16,3 +16,7 @@ RUN mkdir -p tmp_images
 
 EXPOSE 8000
 CMD ["node", "index.js"]
+
+
+FROM postgres:latest
+ENV LANG ja_JP.utf8

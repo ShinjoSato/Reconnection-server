@@ -6,7 +6,7 @@ const pool_data = {
   host: 'localhost',
   database: 'postgres',
   password: 'password',
-  port: 5432
+  port: 5432 //15432
 }
 const pool = new Pool(pool_data);
 
@@ -19,13 +19,13 @@ import { getImage, saveImage } from "./system";
  * @param user_id テーブル名user_tableのカラムid。
  * @param callback 取得したデータを返すFuncstionまたはObject。
  */
-function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: string, open_level: number, post_level: number, callback: any){
+function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_name: string, user_id: string, open_level: number, post_level: number, callback: any){
   pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES($1,$2,$3,$4) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level])
   .then(re=>{
     pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2) RETURNING *;",[user_id, re.rows[0].id])
     .then(r=>{
       if(typeof(callback)=="function"){
-        callback(r);
+        callback({ id: re.rows[0].id, name: chatroom_name, open_level, post_level, picture: getImage(chatroom_path) });
       }else if(typeof(callback)=="object"){
         callback.json(r);
       }
@@ -49,10 +49,10 @@ function createUserRoom(chatroom_icon: number, chatroom_name: string, user_id: s
   });
 }
 
-function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string, callback: any){
+function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string, callback: Function){
   pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
   .then((res) => {
-    createUserRoom(res.rows[0].id, chatroom_name, user_id, open_level, post_level, callback);
+    createUserRoom(res.rows[0].id, res.rows[0].path, chatroom_name, user_id, open_level, post_level, callback);
   })
   .catch((err) => {
     callback({message: "部屋の画像の登録に失敗しました。"});
@@ -65,15 +65,23 @@ function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_
  * @param room_id ルームid。
  * @param callback 結果を返信する関数。
  */
-function addUserIntoRoom(user_id: string, room_id: number, callback: Function){
+function addUserIntoRoom(user_id: string, room_id: number, callback: Function, io: any){
     console.log(user_id, room_id);
-    pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2);", [user_id, room_id])
-    .then((res) => {
-      callback({message: "SUCCESS: from add-user-into-room"});
-    })
-    .catch((err) => {
+    pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2);", [user_id, room_id], (err, res) => {
       console.log(err);
-      callback({message: "ERROR: from add-user-into-room"});
+      pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
+      JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+      JOIN picture_table ON picture_table.id = user_table.image
+      WHERE (user_id, user_chatroom_unit.chatroom_id) = ($1, $2);`, [user_id, room_id])
+      .then((response) => {
+        callback({message: `Add ${response.rows[0].user_name} into ${response.rows[0].room_name} successfully!`, status: true});
+        var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+        io.to(room_id).emit('update-room-user', rows);
+      })
+      .catch((error) => {
+        console.log(error);
+        callback({message: `Error from adding user into room.`, status: false});
+      })
     });
 }
 
@@ -83,15 +91,21 @@ function addUserIntoRoom(user_id: string, room_id: number, callback: Function){
  * @param room_id ルームid。
  * @param callback 結果を返信する関数。
  */
-function removeUserFromRoom(user_id: string, room_id: number, callback: Function){
+function removeUserFromRoom(user_id: string, room_id: number, callback: Function, io: any){
+  pool.query(`SELECT A.id AS user_id, A.name AS user_name, C.id AS room_id, C.name AS room_name FROM user_table AS A
+  JOIN user_chatroom_unit AS B ON A.id = B.user_id
+  JOIN chatroom AS C ON B.chatroom_id = C.id
+  WHERE (A.id, C.id) = ($1, $2);`, [user_id, room_id], (err, res) => {
     pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id])
-    .then((res) => {
-      callback({message: "SUCCESS: remove-user-from-room"});
+    .then((response) => {
+      callback({message: `Remove ${res.rows[0].user_name} from ${res.rows[0].room_name} successfully!`, status: true});
+      io.to(room_id).emit('remove-room-user', { room_id, user_id });
     })
-    .catch((err) => {
-      console.log(err);
-      callback({message: "ERROR: remove-user-from-room"});
+    .catch((error) => {
+      console.log(error);
+      callback({message: `Error from removing user from room.`, status: false});
     });
+  });
 }
 
 /**
@@ -102,12 +116,13 @@ function removeUserFromRoom(user_id: string, room_id: number, callback: Function
  * @param picture_id 画像id。
  * @param response 結果を返信する関数。
  */
-function addUser(id: string, name: string, password: string, picture_id: number, mail: string, authority: boolean, response: any){
+function addUser(id: string, name: string, password: string, picture_id: number, picture_path: string, mail: string, authority: boolean, response: any){
     pool.query("insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;", [id, name, password, picture_id, mail, authority])
     .then((res) => {
-      createUserRoom(res.rows[0].image, res.rows[0].name, res.rows[0].id, 1, 1, response);
+      createUserRoom(res.rows[0].image, picture_path, res.rows[0].name, res.rows[0].id, 1, 1, response);
     })
     .catch((err) => {
+      console.log(err);
       response.json({message: "画像なしでユーザーの登録に失敗しました。"});
     });
 }
@@ -124,9 +139,10 @@ function addUser(id: string, name: string, password: string, picture_id: number,
 function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
     pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
     .then((res) => {
-        addUser(user_id, user_name, user_password, res.rows[0].id, user_mail, user_authority, response);
+        addUser(user_id, user_name, user_password, res.rows[0].id, picture_path, user_mail, user_authority, response);
     })
     .catch((err) => {
+      console.log(err);
       response.json({message: "ユーザーの画像の登録に失敗しました。"});
     });
 }
