@@ -72,11 +72,12 @@ function addUserIntoRoom(user_id: string, room_id: number, callback: Function, i
       pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
       JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
       JOIN picture_table ON picture_table.id = user_table.image
-      WHERE (user_id, user_chatroom_unit.chatroom_id) = ($1, $2);`, [user_id, room_id])
+      WHERE (user_chatroom_unit.chatroom_id) = ($1);`, [room_id])
       .then((response) => {
-        callback({message: `Add ${response.rows[0].user_name} into ${response.rows[0].room_name} successfully!`, status: true});
+        callback({message: `Update ROOM successfully!`, status: true});
         var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-        io.to(room_id).emit('update-room-user', rows);
+        io.to(room_id).emit('update-room-user', { rows, room_id });
+        io.to(`@${user_id}`).emit('receive-invitation-from-room', { user_id, room_id });
       })
       .catch((error) => {
         console.log(error);
@@ -92,20 +93,23 @@ function addUserIntoRoom(user_id: string, room_id: number, callback: Function, i
  * @param callback 結果を返信する関数。
  */
 function removeUserFromRoom(user_id: string, room_id: number, callback: Function, io: any){
-  pool.query(`SELECT A.id AS user_id, A.name AS user_name, C.id AS room_id, C.name AS room_name FROM user_table AS A
-  JOIN user_chatroom_unit AS B ON A.id = B.user_id
-  JOIN chatroom AS C ON B.chatroom_id = C.id
-  WHERE (A.id, C.id) = ($1, $2);`, [user_id, room_id], (err, res) => {
-    pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id])
+  pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id], (error, response) => {
+    console.log(error);
+    pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
+    JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+    JOIN picture_table ON picture_table.id = user_table.image
+    WHERE (user_chatroom_unit.chatroom_id) = ($1);`, [room_id])
     .then((response) => {
-      callback({message: `Remove ${res.rows[0].user_name} from ${res.rows[0].room_name} successfully!`, status: true});
-      io.to(room_id).emit('remove-room-user', { room_id, user_id });
+      callback({message: `Remove from ROOM successfully!`, status: true});
+      var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+      io.to(room_id).emit('update-room-user', { rows, room_id });
+      io.to(`@${user_id}`).emit('get-expelled-from-room', { user_id, room_id });
     })
     .catch((error) => {
       console.log(error);
       callback({message: `Error from removing user from room.`, status: false});
-    });
-  });
+    })
+  })
 }
 
 /**
@@ -338,6 +342,72 @@ function deleteUser(user_id: string, callback: Function){
   })
 }
 
+/**
+ * 一つ分の部屋のデータを送信する関数。
+ * @param user_id User ID
+ * @param room_id Room ID
+ * @param callback 結果を返す関数
+ */
+function getSingleRoom(user_id: String, room_id: number, callback: Function){
+  let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
+  pool.query(`SELECT A.*, B.*, C.path AS picture from chatroom AS A
+  LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
+  JOIN picture_table AS C ON C.id = A.icon
+  WHERE B.user_id = $1
+  AND A.id = $2;`, [user_id, room_id])
+  .then(response => {
+    result.single_room = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority FROM user_table
+    JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
+    JOIN picture_table ON picture_table.id = user_table.image
+    WHERE B.chatroom_id = $1;`, [room_id])
+    .then(response => {
+      result.single_roommember = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+      pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+      JOIN (
+          SELECT user_table.id,user_table.name,picture_table.path FROM user_table
+          JOIN picture_table ON user_table.image = picture_table.id
+      ) AS user_table ON tweet.user_id = user_table.id
+      LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
+      WHERE room_id = $1
+      ORDER BY tweet.id DESC;`, [room_id])
+      .then(response => {
+        console.log(response.rows);
+        result.single_tweet = (response.rows).map((row) => { return { ...row, picture: (row.picture)? getImage(row.picture): null, user_icon: getImage(row.user_icon) }; });
+        pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+        JOIN (
+            SELECT user_table.id,user_table.name,picture_table.path FROM user_table
+            JOIN picture_table ON user_table.image = picture_table.id
+        ) AS user_table ON tweet.user_id = user_table.id
+        LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
+        WHERE room_id = $1
+        AND tweet.picture_id IS NOT NULL
+        ORDER BY tweet.id DESC;`, [room_id])
+        .then(response => {
+          result.single_pictweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture), user_icon: getImage(row.user_icon) }; });
+          callback(result);
+        })
+        .catch(error => {
+          console.log(error);
+          callback({message: '最後にエラーです。'});
+        })
+      })
+      .catch(error => {
+        console.log(error);
+        callback({message: 'エラーです'});
+      })
+    })
+    .catch(error => {
+      console.log(error);
+      callback({message: "エラーが発生しました。"});
+    })
+  })
+  .catch(error => {
+    console.log(error);
+    callback({message: "エラーが生じました。"})
+  })
+}
+
 export {
   addUserIntoRoom,
   removeUserFromRoom,
@@ -353,4 +423,5 @@ export {
   selectAllRoom,
   selectRoom,
   updateRoom,
+  getSingleRoom,
 }

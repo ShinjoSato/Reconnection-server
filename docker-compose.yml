@@ -24,7 +24,7 @@ services:
         source: sample_strage
         target: /var/lib/postgresql/data
     ports:
-      - 15432:5432
+      - 5432:5432
     restart: always
     environment:
       - POSTGRES_USER:postgres

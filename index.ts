@@ -20,6 +20,7 @@ import {
   selectAllRoom,
   selectRoom,
   updateRoom,
+  getSingleRoom,
 } from "./src/psql";
 
 import { getImage, setImage, isExisted } from "./src/system";
@@ -188,6 +189,7 @@ io.on('connection', socket => {
         CHATROOMS.push(val.chatroom_id);
         socket.join(val.chatroom_id);
       }
+      socket.join(`@${data.id}`);//@user id.
       callback({rows: res.rows});
     })
   })
@@ -489,62 +491,7 @@ io.on('connection', socket => {
    * 新しい部屋に追加された時に取得するデータ.
    */
   socket.on('get-single-room', (data, callback) => {
-    let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
-    pool.query(`SELECT A.*, B.*, C.path AS picture from chatroom AS A
-    LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
-    JOIN picture_table AS C ON C.id = A.icon
-    WHERE B.user_id = $1
-    AND A.id = $2;`, [data.user_id, data.room_id])
-    .then(response => {
-      result.single_room = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-      pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority FROM user_table
-      JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
-      JOIN picture_table ON picture_table.id = user_table.image
-      WHERE B.chatroom_id = $1;`, [data.room_id])
-      .then(response => {
-        result.single_roommember = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-        pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
-        JOIN (
-            SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-            JOIN picture_table ON user_table.image = picture_table.id
-        ) AS user_table ON tweet.user_id = user_table.id
-        LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-        WHERE room_id = $1
-        ORDER BY tweet.id DESC;`, [data.room_id])
-        .then(response => {
-          result.single_tweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-          pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
-          JOIN (
-              SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-              JOIN picture_table ON user_table.image = picture_table.id
-          ) AS user_table ON tweet.user_id = user_table.id
-          LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-          WHERE room_id = $1
-          AND tweet.picture_id IS NOT NULL
-          ORDER BY tweet.id DESC;`, [data.room_id])
-          .then(response => {
-            result.single_pictweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-            callback(result);
-          })
-          .catch(error => {
-            console.log(error);
-            callback({message: '最後にエラーです。'});
-          })
-        })
-        .catch(error => {
-          console.log(error);
-          callback({message: 'エラーです'});
-        })
-      })
-      .catch(error => {
-        console.log(error);
-        callback({message: "エラーが発生しました。"});
-      })
-    })
-    .catch(error => {
-      console.log(error);
-      callback({message: "エラーが生じました。"})
-    })
+    getSingleRoom(data.user_id, data.room_id, callback);
   })
 
   socket.on('enter-new-room', (data, callback) => {
@@ -552,6 +499,20 @@ io.on('connection', socket => {
     socket.join(data.room_id);
     callback({message: "新しい部屋に登録されました。"});
   });
+
+  socket.on('get-invited-room', (data, callback) => {
+    pool.query(`SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, B.path AS picture FROM chatroom AS A
+    JOIN picture_table AS B ON A.icon = B.id
+    WHERE A.id = $1;`, [data.room_id])
+    .then((response) => {
+      let room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+      callback(room);
+    })
+    .catch((error) => {
+      console.log(error);
+      callback({message: 'Error occurs!'});
+    })
+  })
 
   function generateRandomString(length) {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
