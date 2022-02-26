@@ -234,7 +234,7 @@ io.on('connection', socket => {
         WHERE tweet.picture_id IS NOT NULL
         ORDER BY tweet.id DESC;`,
       entire_room: `
-        SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, B.path AS picture from chatroom AS A
+        SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
         JOIN picture_table AS B ON A.icon = B.id
         JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
         WHERE C.user_id = $1

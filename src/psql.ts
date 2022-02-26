@@ -350,11 +350,12 @@ function deleteUser(user_id: string, callback: Function){
  */
 function getSingleRoom(user_id: String, room_id: number, callback: Function){
   let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
-  pool.query(`SELECT A.*, B.*, C.path AS picture from chatroom AS A
-  LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
-  JOIN picture_table AS C ON C.id = A.icon
-  WHERE B.user_id = $1
-  AND A.id = $2;`, [user_id, room_id])
+  pool.query(`SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
+  JOIN picture_table AS B ON A.icon = B.id
+  JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
+  WHERE C.user_id = $1
+  AND A.id = $2
+  ORDER BY A.id;`, [user_id, room_id])
   .then(response => {
     result.single_room = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
     pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority FROM user_table
