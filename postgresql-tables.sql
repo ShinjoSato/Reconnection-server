@@ -52,6 +52,12 @@ create table user_chatroom_unit (
     primary key(user_id,chatroom_id)
 );
 
+create table user_friend_unit (
+    user_id     varchar(16) not null references user_table(id),
+    friend_id   varchar(16) not null references user_table(id),
+    time        timestamp not null DEFAULT now(),
+    primary key (user_id, friend_id)
+);
 
 -- サンプルデータ集
 insert into picture_table(label,path) values('ダミー画像','');

@@ -18,7 +18,6 @@ import {
   updateUser,
   deleteUser,
   selectAllRoom,
-  selectRoom,
   updateRoom,
   getSingleRoom,
 } from "./src/psql";
@@ -373,22 +372,20 @@ io.on('connection', socket => {
     selectUsersInRoom(data.id, callback);
   })
 
-  socket.on("receive-not-room-member", (data,callback) => {
+  socket.on("receive-not-room-member-but-friend", (data,callback) => {
     pool.query(`
       SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
       JOIN picture_table ON user_table.image = picture_table.id
+      JOIN user_friend_unit AS C ON C.friend_id = user_table.id
       WHERE user_table.id NOT IN (
         SELECT user_table.id FROM user_table
         JOIN user_chatroom_unit ON user_id = user_table.id
         WHERE chatroom_id = $1
-      );
-    `, [data.id])
+      )
+      AND C.user_id = $2;
+    `, [data.room_id, data.user_id])
     .then((res) => {
-      var rows = (res.rows).map(function(row){
-        var r = row;
-        r.picture = getImage(r.picture);
-        return r;
-      });
+      var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
       callback(rows);
     })
     .catch((err) => {
@@ -442,11 +439,6 @@ io.on('connection', socket => {
     console.log('select all room.\n', data);
     selectAllRoom(callback);
   });
-
-  socket.on('select-room', (data, callback) => {
-    console.log('select room.\n', data);
-    selectRoom(data.user_id, callback);
-  })
 
   socket.on('update-room', (data, callback) => {
     console.log('update room.');
@@ -511,6 +503,51 @@ io.on('connection', socket => {
     .catch((error) => {
       console.log(error);
       callback({message: 'Error occurs!'});
+    })
+  })
+
+  socket.on('get-friend-list', (data, callback) => {
+    pool.query(`SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
+    FROM user_table AS A
+    JOIN picture_table AS B ON B.id = A.image
+    JOIN (
+      SELECT *
+      FROM user_friend_unit AS A
+      WHERE A.user_id = $1
+    ) AS C ON A.id = C.friend_id;`, [data.user_id])
+    .then(response => {
+      let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+      callback(friends);
+    })
+    .catch(error => {
+      console.log(error);
+      callback({message: error.message});
+    })
+  })
+
+  socket.on('search-user', (data, callback) => {
+    pool.query(`SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
+    FROM user_table AS A
+    JOIN picture_table AS B ON B.id = A.image
+    WHERE A.id like $1;`, [data.user_id])
+    .then((response) => {
+      let user = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+      callback(user);
+    })
+    .catch((error) => {
+      console.log(error);
+      callback({message:error.message});
+    })
+  })
+
+  socket.on('connect-to-friend', (data, callback) => {
+    pool.query(`INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`, [data.user_id, data.friend_id])
+    .then((response) => {
+      callback({ message: '追加しました。', status: true });
+    })
+    .catch((error) => {
+      console.log(error);
+      callback({ message: error.message, status: false });
     })
   })
 

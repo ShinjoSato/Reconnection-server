@@ -67,7 +67,7 @@ function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_
  */
 function addUserIntoRoom(user_id: string, room_id: number, callback: Function, io: any){
     console.log(user_id, room_id);
-    pool.query("INSERT INTO user_chatroom_unit VALUES($1,$2);", [user_id, room_id], (err, res) => {
+    pool.query("INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority) VALUES($1,$2,$3);", [user_id, room_id, false], (err, res) => {
       console.log(err);
       pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
       JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
@@ -153,28 +153,6 @@ function addUserWithPicture(user_id: string, user_name: string, user_password: s
 
 function selectAllRoom(callback: Function){
   pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id;")
-  .then((res) => {
-    var rows = (res.rows).map(function(row){
-      var r = row;
-      r.picture = getImage(r.picture);
-      return r;
-    });
-    callback({data: rows});
-  })
-  .catch((err) => {
-    callback({message: "roomを取得できませんでした。"});
-  });
-}
-
-function selectRoom(user_id: string, callback: Function){
-  pool.query(`
-  SELECT chatroom.id, chatroom.name, picture_table.path AS picture
-  FROM chatroom
-  JOIN user_chatroom_unit on user_chatroom_unit.chatroom_id = chatroom.id
-  JOIN picture_table ON picture_table.id = chatroom.icon
-  WHERE user_chatroom_unit.user_id = $1;
-  `
-  , [user_id])
   .then((res) => {
     var rows = (res.rows).map(function(row){
       var r = row;
@@ -422,7 +400,6 @@ export {
   updateUser,
   deleteUser,
   selectAllRoom,
-  selectRoom,
   updateRoom,
   getSingleRoom,
 }
