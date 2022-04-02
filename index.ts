@@ -26,7 +26,7 @@ import { getImage, setImage, isExisted } from "./src/system";
 
 // socket.io
 const host = 'localhost'; //'172.31.44.151';
-const port = 8000;
+const port = 8528; //8528, 8000
 const server = http.createServer(app).listen(port, host, () => {
   console.log('server start. port=' + port);
 });

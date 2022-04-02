@@ -61,6 +61,7 @@ create table user_friend_unit (
 
 -- サンプルデータ集
 insert into picture_table(label,path) values('ダミー画像','');
+insert into picture_table(label,path) values('default image','images/default.png'); -- 必須！
 insert into user_table(id,name,password,image) values('sample01','サンプルユーザー',pgp_sym_encrypt('sample','password'),1);
 insert into picture_table(label,path) values
 ('マイケル画像','/tmp_images/free_max64x64.jpg'),
@@ -78,6 +79,10 @@ insert into chatroom(icon,name) values(1,'ダミールーム'),(5,'ルーム１'
 insert into user_chatroom_unit
 values('sample02',4),('sample04',3),('sample02',2),('sample03',3),('sample04',4);
 insert into tweet(tweet,room_id,user_id) values('サンプルに呟きます',1,'sample01');
+
+insert into user_table(id,name,password,image, mail, authority) values('admin','アドミン', pgp_sym_encrypt('admin','password'),1, 'defaultmail@mail', true); -- 必須！
+INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES(1,'アドミン',1, 1) RETURNING *; -- 必須！
+INSERT INTO user_chatroom_unit(user_id, chatroom_id) VALUES('admin',1) RETURNING *; -- 必須！
 
 -- ユーザー取得
 select user_table.id,user_table.name,picture_table.path from user_table 
