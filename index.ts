@@ -442,7 +442,7 @@ io.on('connection', socket => {
 
   socket.on('update-room', (data, callback) => {
     console.log('update room.');
-    updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, callback);
+    updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, data.user_id, callback);
   })
 
   socket.on('delete-room', (data, callback) => {

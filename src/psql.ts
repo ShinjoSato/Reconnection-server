@@ -166,31 +166,33 @@ function selectAllRoom(callback: Function){
   });
 }
 
-function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, callback: Function){
+function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, user_id: string, callback: Function){
   pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then((res) => {
     if(res.rows.length==1){
-      callback({message: "update room success"})
-      if(picture){
-        pool.query("SELECT picture_table.path AS path FROM chatroom JOIN picture_table ON picture_table.id = chatroom.icon WHERE chatroom.icon = $1;", [res.rows[0].icon])
+        pool.query(`SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
+        JOIN picture_table AS B ON A.icon = B.id
+        JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
+        WHERE A.id = $1
+        AND C.user_id = $2;`, [id, user_id])
         .then((r) => {
-          saveImage(r.rows[0].path, picture);
-          callback({message: '画像も更新したupdate room.'});
+          if(picture){
+            saveImage(r.rows[0].picture, picture);
+          }
+          const data = r.rows.map(x => { return { ...x, picture: getImage(x.picture)}; });
+          callback({message: 'update room success!', status: true, data, id });
         })
         .catch((e) => {
           console.log(e);
-          callback({message: "画像を更新する時にエラーupdate room."});
+          callback({message: "update room error.", status: false});
         })
-      }else{
-        callback({message: "update room success"});
-      }
     }else{
-      callback({message: "error update room"});
+      callback({message: "error update room", status: false});
     }
   })
   .catch((err) => {
     console.log(err);
-    callback({message: "cannnot update room"});
+    callback({message: "cannnot update room", status: false});
   })
 }
 
