@@ -260,26 +260,25 @@ function updateUser(id: string, name: string, picture: any, password: string, ma
     if(res.rows.length==1){
       pool.query("UPDATE user_table SET (name,mail,authority) = ($1,$2,$3) WHERE id = $4 RETURNING *;", [name, mail, authority, id])
       .then((resp) => {
-        if(picture){
-          pool.query("SELECT picture_table.path AS path FROM user_table JOIN picture_table ON picture_table.id = user_table.image WHERE user_table.id = $1;", [id])
-          .then((r) => {
-            saveImage(r.rows[0].path, picture);
-            callback({message: '画像も更新させられましてuser update'})
-          })
-          .catch((e) => {
-            console.log(e);
-            callback({message: '画像を読み込ませるときにエラー'})
-          })
-        }else{
-          callback({message: "画像なしupdateに成功しました"})
-        }
+        pool.query("SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1", [id])
+        .then((r) => {
+          if(picture){
+            saveImage(r.rows[0].image, picture);
+          }
+          const data = r.rows.map(x => { return {...x, image: getImage(x.image)}; })[0];
+          callback({message: 'user update success!', status: true, data})
+        })
+        .catch((e) => {
+          console.log(e);
+          callback({message: 'user update error.', status: false})
+        })
       })
       .catch((erro) => {
         console.log(erro);
-        callback({message: "updateに失敗しました。"})
+        callback({message: "updateに失敗しました。", status: false})
       })
     }else{
-      callback({message: "一致するユーザーがいません。"})
+      callback({message: "一致するユーザーがいません。", status: false})
     }
   })
   .catch((err) => {
