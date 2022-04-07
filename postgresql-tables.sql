@@ -59,6 +59,13 @@ create table user_friend_unit (
     primary key (user_id, friend_id)
 );
 
+create table user_tweet_unit (-- 既読履歴
+    user_id     varchar(16) not null references user_table(id),
+    tweet_id    integer not null references tweet(id),
+    time        timestamp not null DEFAULT now(),
+    primary key(user_id, tweet_id)
+);
+
 -- サンプルデータ集
 insert into picture_table(label,path) values('ダミー画像','');
 insert into picture_table(label,path) values('default image','images/default.png'); -- 必須！
@@ -132,6 +139,27 @@ order by tweet.id;
 select * from user_table
 join user_chatroom_unit on user_table.id = user_chatroom_unit.user_id
 where user_chatroom_unit.chatroom_id = 4;
+-- 全ての呟きに対する既読数と特定ユーザーの既読確認を取得。
+SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
+JOIN(-- 呟きに対する既読数
+    SELECT tweet.id, COUNT(A.tweet_id) AS count
+    FROM tweet
+    LEFT JOIN (
+        SELECT tweet_id
+        FROM user_tweet_unit
+    ) AS A ON tweet.id = A.tweet_id
+    GROUP BY tweet.id
+) AS A ON A.id = tweet.id
+JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
+    SELECT tweet.id, COUNT(A.tweet_id)
+    FROM tweet
+    LEFT JOIN (
+        SELECT tweet_id
+        FROM user_tweet_unit
+        WHERE user_id = 'sample02'
+    ) AS A ON tweet.id = A.tweet_id
+    GROUP BY tweet.id
+) AS B ON B.id = tweet.id;
 
 -- 追加事項
 alter table user_table add column mail text not null DEFAULT 'dummy@dummy';

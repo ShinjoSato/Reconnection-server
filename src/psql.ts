@@ -343,26 +343,71 @@ function getSingleRoom(user_id: String, room_id: number, callback: Function){
     WHERE B.chatroom_id = $1;`, [room_id])
     .then(response => {
       result.single_roommember = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-      pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+      pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
       JOIN (
           SELECT user_table.id,user_table.name,picture_table.path FROM user_table
           JOIN picture_table ON user_table.image = picture_table.id
       ) AS user_table ON tweet.user_id = user_table.id
       LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-      WHERE room_id = $1
-      ORDER BY tweet.id DESC;`, [room_id])
+      JOIN (
+        SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
+        JOIN(-- 呟きに対する既読数
+            SELECT tweet.id, COUNT(A.tweet_id)::int
+            FROM tweet
+            LEFT JOIN (
+                SELECT tweet_id
+                FROM user_tweet_unit
+            ) AS A ON tweet.id = A.tweet_id
+            GROUP BY tweet.id
+        ) AS A ON A.id = tweet.id
+        JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
+            SELECT tweet.id, COUNT(A.tweet_id)::int
+            FROM tweet
+            LEFT JOIN (
+                SELECT tweet_id
+                FROM user_tweet_unit
+                WHERE user_id = $1
+            ) AS A ON tweet.id = A.tweet_id
+            GROUP BY tweet.id
+        ) AS B ON B.id = tweet.id
+      ) AS C ON tweet.id = C.id
+      WHERE room_id = $2
+      ORDER BY tweet.id DESC;`, [user_id, room_id])
       .then(response => {
         console.log(response.rows);
         result.single_tweet = (response.rows).map((row) => { return { ...row, picture: (row.picture)? getImage(row.picture): null, user_icon: getImage(row.user_icon) }; });
-        pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+        pool.query(`SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
         JOIN (
             SELECT user_table.id,user_table.name,picture_table.path FROM user_table
             JOIN picture_table ON user_table.image = picture_table.id
         ) AS user_table ON tweet.user_id = user_table.id
         LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-        WHERE room_id = $1
+        JOIN (
+          -- ツイートの既読数と既読or未読を表すSQL
+          SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
+          JOIN(-- 呟きに対する既読数
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS A ON A.id = tweet.id
+          JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+                  WHERE user_id = $1
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS B ON B.id = tweet.id
+        ) AS C ON tweet.id = C.id
+        WHERE room_id = $2
         AND tweet.picture_id IS NOT NULL
-        ORDER BY tweet.id DESC;`, [room_id])
+        ORDER BY tweet.id DESC;`, [user_id, room_id])
         .then(response => {
           result.single_pictweet = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture), user_icon: getImage(row.user_icon) }; });
           callback(result);

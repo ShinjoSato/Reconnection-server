@@ -208,7 +208,7 @@ io.on('connection', socket => {
   socket.on('get-entire-login-set', (data, callback) => {
     const sqls = {
       entire_tweet: `
-        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
         JOIN (
             SELECT user_table.id,user_table.name,picture_table.path FROM user_table
             JOIN picture_table ON user_table.image = picture_table.id
@@ -218,9 +218,32 @@ io.on('connection', socket => {
           SELECT * FROM user_chatroom_unit
           WHERE user_id = $1
         ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
+        JOIN (
+          -- ツイートの既読数と既読or未読を表すSELECT文
+          SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
+          JOIN(-- 呟きに対する既読数
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS A ON A.id = tweet.id
+          JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+                  WHERE user_id = $2
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS B ON B.id = tweet.id
+        ) AS C ON tweet.id = C.id
         ORDER BY tweet.room_id, tweet.id DESC;`,
       entire_pictweet: `
-        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture FROM tweet
+        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
         JOIN (
             SELECT user_table.id,user_table.name,picture_table.path FROM user_table
             JOIN picture_table ON user_table.image = picture_table.id
@@ -230,6 +253,29 @@ io.on('connection', socket => {
           SELECT * FROM user_chatroom_unit
           WHERE user_id = $1
         ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
+        JOIN (
+          -- ツイートの既読数と既読or未読を表すSELECT文
+          SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
+          JOIN(-- 呟きに対する既読数
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS A ON A.id = tweet.id
+          JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
+              SELECT tweet.id, COUNT(A.tweet_id)::int
+              FROM tweet
+              LEFT JOIN (
+                  SELECT tweet_id
+                  FROM user_tweet_unit
+                  WHERE user_id = $2
+              ) AS A ON tweet.id = A.tweet_id
+              GROUP BY tweet.id
+          ) AS B ON B.id = tweet.id
+        ) AS C ON tweet.id = C.id
         WHERE tweet.picture_id IS NOT NULL
         ORDER BY tweet.id DESC;`,
       entire_room: `
@@ -253,7 +299,7 @@ io.on('connection', socket => {
     };
     let sets = { et_tweet: null, et_pictweet: null, init_room: null, entire_room: null, entire_user: null };
     
-    pool.query(sqls.entire_tweet, [data.user_id])
+    pool.query(sqls.entire_tweet, [data.user_id, data.user_id])
     .then((response) => {
       let tweets = (response.rows).map(function(row){
         var r = row;
@@ -265,7 +311,7 @@ io.on('connection', socket => {
       });
       sets.et_tweet = divideByRoom(tweets, 'room_id');
 
-      pool.query(sqls.entire_pictweet, [data.user_id])
+      pool.query(sqls.entire_pictweet, [data.user_id, data.user_id])
       .then((response2) => {
         var tweets = (response2.rows).map(function(row){
           var r = row;
@@ -548,6 +594,37 @@ io.on('connection', socket => {
     .catch((error) => {
       console.log(error);
       callback({ message: error.message, status: false });
+    })
+  })
+
+  socket.on('notice-reading-tweet', (data, callback) => {
+    pool.query('INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);', [data.user_id, data.tweet_id])
+    .then(response => {
+      pool.query(`SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
+        JOIN(-- 呟きに対する既読数
+            SELECT tweet.id, COUNT(A.tweet_id)::int
+            FROM tweet
+            LEFT JOIN (
+                SELECT tweet_id
+                FROM user_tweet_unit
+            ) AS A ON tweet.id = A.tweet_id
+            GROUP BY tweet.id
+        ) AS A ON A.id = tweet.id
+        WHERE tweet.id = $1;`, [data.tweet_id])
+      .then(response => {
+        const room_id = response.rows[0].room_id;
+        callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
+        io.to(room_id).emit('update-tweet-information', { data: response.rows[0] });
+      })
+      .catch(error => {
+        // console.log(error);
+        console.log('既に読まれています。\t', error.detail);
+        callback({message: error.detail, status: false});
+      })
+    })
+    .catch(error => {
+      console.log(error);
+      callback({message: "エラーが生じました。", status: false});
     })
   })
 
