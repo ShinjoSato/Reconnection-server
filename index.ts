@@ -6,10 +6,8 @@ const fs = require('fs')
 const {randomBytes} = require('crypto')
 
 import { 
-  addUser, 
   addUserIntoRoom, 
   addUserWithPicture, 
-  createUserRoom, 
   createUserRoomWithPicture, 
   removeUserFromRoom, 
   deleteRoom, 
@@ -468,17 +466,13 @@ io.on('connection', socket => {
 
   socket.on('create-room', (data,callback) => {
     console.log('部屋を作ります。')
-    console.log(data);
-    if(data.picture){
-      var path = `./${ picture_directory }/${generateRandomString(12)}.png`
-      while(isExisted(path)){
-        path = `./${ picture_directory }/${generateRandomString(12)}.png`
-      }
-      fs.writeFileSync(path, setImage(data.picture), 'base64');
-      createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル', path, callback);
-    }else{
-      createUserRoom(1, './images/default.png', data.roomName, data.userId, data.open_level, data.post_level, callback);
+    var path = `./${ picture_directory }/${generateRandomString(12)}.png`
+    while(isExisted(path)){
+      path = `./${ picture_directory }/${generateRandomString(12)}.png`
     }
+    const image =(data.picture)? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
+    fs.writeFileSync(path, image, 'base64');
+    createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path, callback);
   });
 
   socket.on('select-all-room', (data, callback) => {
@@ -657,15 +651,11 @@ app.get("/disconnected", function (request, response) {
 app.post("/sign-on/check", function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' });
   const data = request.body;
-  if(data.picture!='null'){
-    var path = `./${ picture_directory }/${generateRandomString(12)}.png`
-    while(isExisted(path)){
-      path = `./${ picture_directory }/${generateRandomString(12)}.png`
-    }
-    fs.writeFileSync(path, setImage(data.picture), 'base64');
-    addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル', path, response);
-    
-  }else{
-    addUser(data.user_id, data.user_name, data.password1, 1, './images/default.png', data.mail, data.authority, response);
+  var path = `./${ picture_directory }/${generateRandomString(12)}.png`
+  while(isExisted(path)){
+    path = `./${ picture_directory }/${generateRandomString(12)}.png`
   }
+  const image =(data.picture!=='null')? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
+  fs.writeFileSync(path, image, 'base64');
+  addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
 });

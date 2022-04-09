@@ -113,25 +113,6 @@ function removeUserFromRoom(user_id: string, room_id: number, callback: Function
 }
 
 /**
- * ユーザー登録する関数。
- * @param id ユーザーid。
- * @param name ユーザーネーム。
- * @param password ユーザーパスワード。
- * @param picture_id 画像id。
- * @param response 結果を返信する関数。
- */
-function addUser(id: string, name: string, password: string, picture_id: number, picture_path: string, mail: string, authority: boolean, response: any){
-    pool.query("insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;", [id, name, password, picture_id, mail, authority])
-    .then((res) => {
-      createUserRoom(res.rows[0].image, picture_path, res.rows[0].name, res.rows[0].id, 1, 1, response);
-    })
-    .catch((err) => {
-      console.log(err);
-      response.json({message: "画像なしでユーザーの登録に失敗しました。"});
-    });
-}
-
-/**
  * 画像付きでユーザー登録する関数。
  * @param user_id ユーザーid。
  * @param user_name ユーザーネーム。
@@ -143,7 +124,14 @@ function addUser(id: string, name: string, password: string, picture_id: number,
 function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
     pool.query("insert into picture_table(label,path) values($1,$2) returning *;", [picture_label, picture_path])
     .then((res) => {
-        addUser(user_id, user_name, user_password, res.rows[0].id, picture_path, user_mail, user_authority, response);
+        pool.query("insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;", [user_id, user_name, user_password, res.rows[0].id, user_mail, user_authority])
+        .then((res) => {
+          createUserRoom(res.rows[0].image, picture_path, res.rows[0].name, res.rows[0].id, 1, 1, response);
+        })
+        .catch((err) => {
+          console.log(err);
+          response.json({message: "ユーザーの登録に失敗しました。"});
+        });
     })
     .catch((err) => {
       console.log(err);
@@ -436,7 +424,6 @@ function getSingleRoom(user_id: String, room_id: number, callback: Function){
 export {
   addUserIntoRoom,
   removeUserFromRoom,
-  addUser,
   addUserWithPicture,
   createUserRoom,
   createUserRoomWithPicture,
