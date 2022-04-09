@@ -33,18 +33,18 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
     .catch(err=>{
       console.log("err:\n",err);
       if(typeof(callback)=="function"){
-        callback({message: "err"});
+        callback({message: "err", status: false});
       }else if(typeof(callback)=="object"){
-        callback.json({message: "err"});
+        callback.json({message: "err", status: false});
       }
     })
   })
   .catch(erro=>{
     console.log("erro:\n",erro);
     if(typeof(callback)=="function"){
-      callback({message: "erro"});
+      callback({message: "erro", status: false});
     }else if(typeof(callback)=="function"){
-      callback.json({message: "erro"});
+      callback.json({message: "erro", status: false});
     }
   });
 }
@@ -130,12 +130,12 @@ function addUserWithPicture(user_id: string, user_name: string, user_password: s
         })
         .catch((err) => {
           console.log(err);
-          response.json({message: "ユーザーの登録に失敗しました。"});
+          response.json({message: "ユーザーの登録に失敗しました。", status: false});
         });
     })
     .catch((err) => {
       console.log(err);
-      response.json({message: "ユーザーの画像の登録に失敗しました。"});
+      response.json({message: "ユーザーの画像の登録に失敗しました。", status: false});
     });
 }
 
