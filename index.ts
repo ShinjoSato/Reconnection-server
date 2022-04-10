@@ -68,10 +68,8 @@ io.on('connection', socket => {
     const tmp_pool = new Pool(pool_data)
     tmp_pool.connect().then(client => {
       pool.query("select A.id as id, A.name as name, A.mail AS mail, A.authority AS authority, B.path as image from user_table as A join picture_table as B on B.id = A.image where A.id = $1 and pgp_sym_decrypt(A.password, 'password') = $2;", [data.userId, data.password], (err, res) => {
-        var user = (res.rows).map(function(row){
-          var r = row
-          r.image = getImage(r.image)
-          return r
+        var user = (res.rows).map(row => {
+          return { ...row, image: getImage(row.image) };
         })
         if(res && 0 < res.rows.length){
           switch(data.method){
@@ -80,7 +78,8 @@ io.on('connection', socket => {
               break
             case 'register':
               delete data.method
-              callback(data)
+              const board = fs.readFileSync('./docs/board.txt', 'utf-8');
+              callback({ ...data, board });
               break
           }
         }
