@@ -65,25 +65,37 @@ function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_
  * @param room_id ルームid。
  * @param callback 結果を返信する関数。
  */
-function addUserIntoRoom(user_id: string, room_id: number, callback: Function, io: any){
+function addUserIntoRoom(user_id: string, room_id: number, opening: boolean, posting: boolean, callback: Function, io: any){
     console.log(user_id, room_id);
-    pool.query("INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority) VALUES($1,$2,$3);", [user_id, room_id, false], (err, res) => {
-      console.log(err);
-      pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
-      JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
-      JOIN picture_table ON picture_table.id = user_table.image
-      WHERE (user_chatroom_unit.chatroom_id) = ($1);`, [room_id])
-      .then((response) => {
-        callback({message: `Update ROOM successfully!`, status: true});
-        var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-        io.to(room_id).emit('update-room-user', { rows, room_id });
-        io.to(`@${user_id}`).emit('receive-invitation-from-room', { user_id, room_id });
-      })
-      .catch((error) => {
-        console.log(error);
-        callback({message: `Error from adding user into room.`, status: false});
-      })
-    });
+    pool.query("INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3, $4, $5);", [user_id, room_id, false, opening, posting])
+    .then(response => {
+      sendUpdatedRoomUsers(user_id, room_id, callback, io);
+    })
+    .catch(error => {
+      console.log(error);
+      callback({message: "失敗", status: false});
+    })
+}
+
+/**
+ * ユーザーと部屋の結びつきの設定を変更する関数。
+ * @param user_id {string} 指定するユーザーID。
+ * @param room_id {number} 指定する部屋ID。
+ * @param opening {boolean} 閲覧権限を示すBoolean。
+ * @param posting {boolean} 呟き権限を示すBoolean。
+ * @param callback {Function} 結果を返す関数。
+ * @param io {any} ソケット接続されている端末に送信する為の変数。
+ */
+function updateUserInRoom(user_id: string, room_id: number, opening: boolean, posting: boolean, callback: Function, io: any){
+  console.log(user_id, room_id);
+  pool.query("UPDATE user_chatroom_unit SET (opening, posting) = ($1, $2) WHERE (user_id, chatroom_id) = ($3, $4);", [opening, posting, user_id, room_id])
+  .then(response => {
+    sendUpdatedRoomUsers(user_id, room_id, callback, io);
+  })
+  .catch(error => {
+    console.log(error);
+    callback({message: "失敗", status: false});
+  })
 }
 
 /**
@@ -93,22 +105,37 @@ function addUserIntoRoom(user_id: string, room_id: number, callback: Function, i
  * @param callback 結果を返信する関数。
  */
 function removeUserFromRoom(user_id: string, room_id: number, callback: Function, io: any){
-  pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id], (error, response) => {
+  pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id])
+  .then(response => {
+    sendUpdatedRoomUsers(user_id, room_id, callback, io);
+  })
+  .catch(error => {
     console.log(error);
-    pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
-    JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
-    JOIN picture_table ON picture_table.id = user_table.image
-    WHERE (user_chatroom_unit.chatroom_id) = ($1);`, [room_id])
-    .then((response) => {
-      callback({message: `Remove from ROOM successfully!`, status: true});
-      var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-      io.to(room_id).emit('update-room-user', { rows, room_id });
-      io.to(`@${user_id}`).emit('get-expelled-from-room', { user_id, room_id });
-    })
-    .catch((error) => {
-      console.log(error);
-      callback({message: `Error from removing user from room.`, status: false});
-    })
+    callback({message: "失敗", status: false});
+  })
+}
+
+/**
+ * ユーザーと部屋の結び付きを取得する関数。
+ * @param user_id {string} ユーザーIDを示すString。
+ * @param room_id {number} 部屋IDを示すNumber。
+ * @param callback {Function} 結果を返す関数。
+ * @param io {any} ソケット接続されている端末に送信する為の変数。
+ */
+function sendUpdatedRoomUsers(user_id: string, room_id: number, callback: Function, io: any){
+  pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
+  JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+  JOIN picture_table ON picture_table.id = user_table.image
+  WHERE (user_chatroom_unit.chatroom_id) = ($1);`, [room_id])
+  .then((response) => {
+    callback({message: `Update ROOM successfully!`, status: true});
+    var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    io.to(room_id).emit('update-room-user', { rows, room_id });
+    io.to(`@${user_id}`).emit('receive-invitation-from-room', { user_id, room_id });
+  })
+  .catch((error) => {
+    console.log(error);
+    callback({message: `Error from adding user into room.`, status: false});
   })
 }
 
@@ -223,7 +250,7 @@ function selectAllUser(callback: Function){
 
 function selectUsersInRoom(room_id: string, callback: Function){
   pool.query(`
-  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
+  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
   JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
   WHERE user_chatroom_unit.chatroom_id = $1;
@@ -325,7 +352,7 @@ function getSingleRoom(user_id: String, room_id: number, callback: Function){
   ORDER BY A.id;`, [user_id, room_id])
   .then(response => {
     result.single_room = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-    pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority FROM user_table
+    pool.query(`SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority, B.opening AS opening, B.posting AS posting FROM user_table
     JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
     JOIN picture_table ON picture_table.id = user_table.image
     WHERE B.chatroom_id = $1;`, [room_id])
@@ -423,6 +450,7 @@ function getSingleRoom(user_id: String, room_id: number, callback: Function){
 
 export {
   addUserIntoRoom,
+  updateUserInRoom,
   removeUserFromRoom,
   addUserWithPicture,
   createUserRoom,

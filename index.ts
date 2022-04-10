@@ -6,7 +6,8 @@ const fs = require('fs')
 const {randomBytes} = require('crypto')
 
 import { 
-  addUserIntoRoom, 
+  addUserIntoRoom,
+  updateUserInRoom,
   addUserWithPicture, 
   createUserRoomWithPicture, 
   removeUserFromRoom, 
@@ -284,7 +285,7 @@ io.on('connection', socket => {
         ORDER BY A.id;
         `,
       entire_user: `
-        SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority FROM user_table
+        SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
         JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
         JOIN picture_table ON picture_table.id = user_table.image
         JOIN (
@@ -455,7 +456,12 @@ io.on('connection', socket => {
 
   socket.on("add-user-into-room", (data, callback) => {
     console.log(data);
-    addUserIntoRoom(data.user_id, data.room_id, callback, io);
+    addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, callback, io);
+  })
+
+  socket.on("update-user-in-room", (data, callback) => {
+    console.log(data);
+    updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, callback, io);
   })
 
   socket.on("remove-user-from-room", (data, callback) => {
