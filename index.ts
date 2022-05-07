@@ -5,20 +5,39 @@ const app = express();
 const fs = require('fs')
 const {randomBytes} = require('crypto')
 
-import { 
+import {
+  insertIntoPicture,
+  insertIntoTweet,
+  insertIntoPicTweet,
+  getSingleTweet,
+  getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
-  addUserWithPicture, 
+  addUserWithPicture,
+  insertIntoUserTweetUnit,
+  insertIntoUserFriendUnit,
   createUserRoomWithPicture, 
-  removeUserFromRoom, 
+  removeUserFromRoom,
+  getRoomStatus,
+  getRoomStatusForUser,
   deleteRoom, 
   selectAllUser,
   selectUsersInRoom,
-  updateUser,
+  selectUsersFriends,
+  selectFriendNotInRoom,
+  getUserProfileWithPass,
+  selectUserWithId,
+  checkAndUpdateUser,
   deleteUser,
   selectAllRoom,
   updateRoom,
   getSingleRoom,
+  getTweetInSingleRoom,
+  getTweetInEachRoom,
+  getPicTweetInEachRoom,
+  getInitialRoom,
+  getRoomsUserBelong,
+  getMemberInEachRoom,
 } from "./src/psql";
 
 import { getImage, setImage, isExisted } from "./src/system";
@@ -66,129 +85,70 @@ io.on('connection', socket => {
 
   socket.on('connect-to-server', (data, callback) => {
     const tmp_pool = new Pool(pool_data)
-    tmp_pool.connect().then(client => {
-      pool.query("select A.id as id, A.name as name, A.mail AS mail, A.authority AS authority, B.path as image from user_table as A join picture_table as B on B.id = A.image where A.id = $1 and pgp_sym_decrypt(A.password, 'password') = $2;", [data.userId, data.password], (err, res) => {
-        var user = (res.rows).map(row => {
-          return { ...row, image: getImage(row.image) };
-        })
-        if(res && 0 < res.rows.length){
-          switch(data.method){
-            case 'login':
-              callback(user[0])
-              break
-            case 'register':
-              delete data.method
-              const board = fs.readFileSync('./docs/board.txt', 'utf-8');
-              callback({ ...data, board });
-              break
-          }
+    tmp_pool.connect().then(async client => {
+
+      const profile = await getUserProfileWithPass(data.userId, data.password);
+      if(!profile.status)
+        callback(profile);
+      var user = (profile.data.rows).map(row => { return { ...row, image: getImage(row.image) }; })
+      if(profile.data && 0 < profile.data.rows.length){
+        switch(data.method){
+          case 'login':
+            callback(user[0])
+            break
+          case 'register':
+            delete data.method
+            const board = fs.readFileSync('./docs/board.txt', 'utf-8');
+            callback({ ...data, board });
+            break
         }
-      })
+      }
+      
     })
     .catch(err => {
       console.log(err)
     })
   })
 
-  socket.on('chat', (data, callback) => {
-    if(data.picture){
-      // With picture
+  socket.on('chat', async (data, callback) => {
+    console.log(`chat.`);
+    if(data.picture){// With picture
       var path = `${ picture_directory }/${generateRandomString(12)}.png`
       while(isExisted(path)){
         path = `${ picture_directory }/${generateRandomString(12)}.png`
       }
-      fs.writeFile(path, setImage(data.picture), 'base64', function(err) {
-        pool.query(`
-          insert into picture_table(label,path)
-          values($1,$2) returning *;
-        `, ['練習用のラベル', path], (error, res) => {
-          pool.query(`
-            insert into tweet(tweet,room_id,user_id,picture_id,head)
-            values($1,$2,$3,$4,$5) RETURNING *;
-          `, [data.text, data.room, data.user, res.rows[0].id, data.head], (error, res) => {
-            pool.query(`
-              select tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
-              join (
-                  select user_table.id,user_table.name,picture_table.path from user_table
-                  join picture_table on user_table.image = picture_table.id
-              ) as user_table on tweet.user_id = user_table.id
-              left join picture_table on tweet.picture_id = picture_table.id
-              where tweet.id = $1
-            `, [res.rows[0].id])
-            .then((response) => {
-              var tweet = (response.rows).map(function(row){
-                var r = row;
-                r.user_icon = getImage(r.user_icon);
-                if(r.picture){
-                  r.picture = getImage(r.picture);
-                }
-                return r;
-              });
-              console.log('* to の確認 with picture*:',{rows: res.rows});
-              if(CHATROOMS.includes(data.room)){
-                console.log('通知を送る');
-                io.to(data.room).emit('receive-notification', tweet[0])
-              }
-            })
-            .catch((error) => {
-              console.log(error);
-              callback({message: "エラーが発声しました。"});
-            })
-            // pool.end()
-          })
-        })
+      fs.writeFile(path, setImage(data.picture), 'base64', async function(err) {
+        const pict = await insertIntoPicture('練習用のラベル', path);
+        const insert = await insertIntoPicTweet(data.text, data.room, data.user, pict.data.rows[0].id, data.head);
+        const result = await getSingleTweet(insert.data.rows[0].id);
+        if(result.status && CHATROOMS.includes(data.room)){
+          console.log('通知を送る test2')
+          io.to(data.room).emit('receive-notification', result.data[0])
+        }
+        callback({ status: true, message: "success!" });
       })
-    }else{
-      // Without pictures
-      pool.query(`
-        insert into tweet(tweet,room_id,user_id,head)
-        values($1,$2,$3,$4) RETURNING *;
-      `, [data.text, data.room, data.user, data.head], (error, res) => {
-        pool.query(`
-          select tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
-          join (
-              select user_table.id,user_table.name,picture_table.path from user_table
-              join picture_table on user_table.image = picture_table.id
-          ) as user_table on tweet.user_id = user_table.id
-          left join picture_table on tweet.picture_id = picture_table.id
-          where tweet.id = $1
-        `, [res.rows[0].id])
-        .then((response) => {
-          var tweet = (response.rows).map(function(row){
-            var r = row;
-            r.user_icon = getImage(r.user_icon);
-            if(r.picture){
-              r.picture = getImage(r.picture);
-            }
-            return r;
-          });
-          if(CHATROOMS.includes(data.room)){
-            console.log('通知を送る')
-            io.to(data.room).emit('receive-notification', tweet[0])
-          }
-        })
-        .catch((error) => {
-          console.log(error);
-          callback({message: "エラー"});
-        })
-        // pool.end()
-      })
+    }else{// Without pictures
+      const insert = await insertIntoTweet(data.text, data.room, data.user, data.head);
+      const result = await getSingleTweet(insert.data.rows[0].id);
+      if(result.status && CHATROOMS.includes(data.room)){
+        console.log('通知を送る')
+        io.to(data.room).emit('receive-notification', result.data[0])
+      }
+      callback({ status: true, message: "success!" });
     }
   })
 
-  socket.on('first-login-room', (data, callback) => {
-    pool.query(`
-      select * from chatroom
-      left join user_chatroom_unit as usrroom on usrroom.chatroom_id = id
-      where usrroom.user_id = $1;
-    `, [data.id], (err, res) => {
-      for(const val of res.rows){
-        CHATROOMS.push(val.chatroom_id);
-        socket.join(val.chatroom_id);
-      }
-      socket.join(`@${data.id}`);//@user id.
-      callback({rows: res.rows});
-    })
+  socket.on('first-login-room', async (data, callback) => {
+    console.log(`first login room.`);
+    const rooms = await getInitialRoom(data.id);
+    if(!rooms.status)
+      callback(rooms);
+    for(const val of rooms.data){
+      CHATROOMS.push(val.chatroom_id);
+      socket.join(val.chatroom_id);
+    }
+    socket.join(`@${data.id}`);//@user id.
+    callback({rows: rooms.data});
   })
 
   function divideByRoom (objects: Array<Object>, key: string){
@@ -203,285 +163,92 @@ io.on('connection', socket => {
     return rooms;
   }
 
-  socket.on('get-entire-login-set', (data, callback) => {
-    const sqls = {
-      entire_tweet: `
-        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
-        JOIN (
-            SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-            JOIN picture_table ON user_table.image = picture_table.id
-        ) AS user_table ON tweet.user_id = user_table.id
-        LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-        JOIN(
-          SELECT * FROM user_chatroom_unit
-          WHERE user_id = $1
-        ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
-        JOIN (
-          -- ツイートの既読数と既読or未読を表すSELECT文
-          SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
-          JOIN(-- 呟きに対する既読数
-              SELECT tweet.id, COUNT(A.tweet_id)::int
-              FROM tweet
-              LEFT JOIN (
-                  SELECT tweet_id
-                  FROM user_tweet_unit
-              ) AS A ON tweet.id = A.tweet_id
-              GROUP BY tweet.id
-          ) AS A ON A.id = tweet.id
-          JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
-              SELECT tweet.id, COUNT(A.tweet_id)::int
-              FROM tweet
-              LEFT JOIN (
-                  SELECT tweet_id
-                  FROM user_tweet_unit
-                  WHERE user_id = $2
-              ) AS A ON tweet.id = A.tweet_id
-              GROUP BY tweet.id
-          ) AS B ON B.id = tweet.id
-        ) AS C ON tweet.id = C.id
-        ORDER BY tweet.room_id, tweet.id DESC;`,
-      entire_pictweet: `
-        SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
-        JOIN (
-            SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-            JOIN picture_table ON user_table.image = picture_table.id
-        ) AS user_table ON tweet.user_id = user_table.id
-        LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-        JOIN(
-          SELECT * FROM user_chatroom_unit
-          WHERE user_id = $1
-        ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
-        JOIN (
-          -- ツイートの既読数と既読or未読を表すSELECT文
-          SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
-          JOIN(-- 呟きに対する既読数
-              SELECT tweet.id, COUNT(A.tweet_id)::int
-              FROM tweet
-              LEFT JOIN (
-                  SELECT tweet_id
-                  FROM user_tweet_unit
-              ) AS A ON tweet.id = A.tweet_id
-              GROUP BY tweet.id
-          ) AS A ON A.id = tweet.id
-          JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
-              SELECT tweet.id, COUNT(A.tweet_id)::int
-              FROM tweet
-              LEFT JOIN (
-                  SELECT tweet_id
-                  FROM user_tweet_unit
-                  WHERE user_id = $2
-              ) AS A ON tweet.id = A.tweet_id
-              GROUP BY tweet.id
-          ) AS B ON B.id = tweet.id
-        ) AS C ON tweet.id = C.id
-        WHERE tweet.picture_id IS NOT NULL
-        ORDER BY tweet.id DESC;`,
-      entire_room: `
-        SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
-        JOIN picture_table AS B ON A.icon = B.id
-        JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
-        WHERE C.user_id = $1
-        ORDER BY A.id;
-        `,
-      entire_user: `
-        SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
-        JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
-        JOIN picture_table ON picture_table.id = user_table.image
-        JOIN (
-          SELECT chatroom_id AS room_id 
-          FROM user_chatroom_unit
-          WHERE user_id = $1
-        ) AS D ON user_chatroom_unit.chatroom_id = D.room_id
-        order by user_chatroom_unit.chatroom_id;
-      `,
-    };
+  socket.on('get-users-rooms', async (data, callback) => {// swift用に用意
+    callback(divideByRoom(await getRoomsUserBelong(data.user_id), 'id'));
+  })
+
+  socket.on('get-users-friends', async (data, callback) => {// swift用に用意
+    callback(divideByRoom(await getMemberInEachRoom(data.user_id), 'room_id'));
+  })
+
+  socket.on('get-tweets-in-room', async (data, callback) => {// swift用に用意
+    callback(await getTweetInSingleRoom(data.user_id, data.room_id));
+  })
+
+  socket.on('get-entire-login-set', async (data, callback) => {
+    console.log(`get entire login set.`)
     let sets = { et_tweet: null, et_pictweet: null, init_room: null, entire_room: null, entire_user: null };
-    
-    pool.query(sqls.entire_tweet, [data.user_id, data.user_id])
-    .then((response) => {
-      let tweets = (response.rows).map(function(row){
-        var r = row;
-        r.user_icon = getImage(r.user_icon);
-        if(r.picture){
-          r.picture = getImage(r.picture);
-        }
-        return r;
-      });
-      sets.et_tweet = divideByRoom(tweets, 'room_id');
-
-      pool.query(sqls.entire_pictweet, [data.user_id, data.user_id])
-      .then((response2) => {
-        var tweets = (response2.rows).map(function(row){
-          var r = row;
-          r.user_icon = getImage(r.user_icon);
-          r.picture = getImage(r.picture);
-          return r;
-        });
-        sets.et_pictweet = divideByRoom(tweets, 'room_id');
-
-        pool.query(`
-          SELECT A.*, B.*, C.path AS picture from chatroom AS A
-          LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
-          JOIN picture_table AS C ON C.id = A.icon
-          WHERE B.user_id = $1;
-        `, [data.user_id])
-        .then((res) => {
-          var rooms = (res.rows).map(function(row){
-            var r = row;
-            r.picture = getImage(r.picture);
-            return r;
-          });
-          sets.init_room = rooms;
-
-          pool.query(sqls.entire_room, [data.user_id])
-          .then((response4) => {
-            var rows = (response4.rows).map(function(row){
-              var r = row;
-              r.picture = getImage(r.picture);
-              return r;
-            });
-            sets.entire_room = divideByRoom(rows, 'id');
-
-            pool.query(sqls.entire_user, [data.user_id])
-            .then((response5) => {
-              var users = (response5.rows).map(function(row){
-                var r = row;
-                r.picture = getImage(r.picture);
-                return r;
-              });
-              sets.entire_user = divideByRoom(users, 'room_id');
-              callback(sets);
-            })
-            .catch((error5) => {
-              console.log(error5);
-              callback({message: "エラー5"});
-            })
-          })
-          .catch((error4) => {
-            console.log(error4);
-            callback({message: "エラー4"});
-          })
-        }).catch((error3) => {
-          console.log(error3);
-          callback({message: "エラー3"});
-        })
-      }).catch((error2) => {
-        console.log(error2);
-        callback({ message: "エラー2" });
-      })
-    })
-    .catch((error) => {
-      console.log(error);
-      callback({ message: "エラー1" });
-    })
+    sets.et_tweet = divideByRoom(await getTweetInEachRoom(data.user_id), 'room_id');
+    sets.et_pictweet = divideByRoom(await getPicTweetInEachRoom(data.user_id), 'room_id');
+    const init_room = await getInitialRoom(data.user_id);
+    sets.init_room = init_room.data;
+    sets.entire_room = divideByRoom(await getRoomsUserBelong(data.user_id), 'id')
+    sets.entire_user = divideByRoom(await getMemberInEachRoom(data.user_id), 'room_id');
+    callback(sets);
   })
 
-  socket.on('new-message', (data, callback) => {
-    pool.query(`
-      select tweet.id, tweet, tweet.head, tweet.time, user_table.name as user, user_table.path as user_icon from tweet
-      join (
-          select user_table.id,user_table.name,picture_table.path from user_table
-          join picture_table on user_table.image = picture_table.id
-      ) as user_table on tweet.user_id = user_table.id
-      where tweet.id=$1;
-    `, [data.id], (err, res) => {
-      var tweet = (res.rows).map(function(row){
-        var r = row
-        r.user_icon = getImage(r.user_icon)
-        return r
-      })
-      callback({rows: tweet})
-    })
+  socket.on('new-message', async (data, callback) => {
+    const tweet = await getSingleTweet(data.id);
+    if(!tweet.status)
+      callback(tweet);
+    callback({rows: tweet.data})
   });
 
-  socket.on('call-room-list', (data, callback) => {
-    pool.query(`
-      select chatroom.id,chatroom.name,picture_table.path AS picture,user_chatroom_unit.user_id from chatroom
-      join picture_table on chatroom.icon = picture_table.id
-      join user_chatroom_unit on chatroom.id = user_chatroom_unit.chatroom_id
-      where user_chatroom_unit.user_id = $1;
-    `, [data.user_id], (err, res) => {
-        var room = (res.rows).map(function(row){
-          var r = row
-          r.picture = getImage(r.picture)
-          return r
-        })
-        callback({rows: room})
-        // pool.end()
-    })
-  })
-
-  socket.on('receive-room-member', (data, callback) => {
+  socket.on('receive-room-member', async (data, callback) => {
     console.log("receive room member.");
-    selectUsersInRoom(data.id, callback);
+    const users = await selectUsersInRoom(data.id);
+    if(!users.status)
+      callback(users);
+    callback({ rows: users.data });
   })
 
-  socket.on("receive-not-room-member-but-friend", (data,callback) => {
-    pool.query(`
-      SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
-      JOIN picture_table ON user_table.image = picture_table.id
-      JOIN user_friend_unit AS C ON C.friend_id = user_table.id
-      WHERE user_table.id NOT IN (
-        SELECT user_table.id FROM user_table
-        JOIN user_chatroom_unit ON user_id = user_table.id
-        WHERE chatroom_id = $1
-      )
-      AND C.user_id = $2;
-    `, [data.room_id, data.user_id])
-    .then((res) => {
-      var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-      callback(rows);
-    })
-    .catch((err) => {
-      callback({message: "エラーが発生しました。"});
-    });
+  socket.on("receive-not-room-member-but-friend", async (data,callback) => {
+    const member = await selectFriendNotInRoom(data.room_id, data.user_id);
+    if(!member.status)
+      callback(member);
+    callback(member.data);
   });
 
-  socket.on("receive-chatroom-with-picture", (data, callback) => {
-    pool.query("SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND A.id=$1;", [data.room_id])
-    .then((res) => {
-      var rows = (res.rows).map(function(row){
-        var r = row;
-        r.picture = getImage(r.picture);
-        return r;
-      });
-      callback(rows);
-    })
-    .catch((err) => {
-      console.log(err);
-      callback({message: "エラーが発生しました。"});
-    })
+  socket.on("receive-chatroom-with-picture", async (data, callback) => {
+    const room = await getRoomStatus(data.room_id);
+    if(room.status)
+      return room.data;
+    else
+      return room;
   });
 
-  socket.on("add-user-into-room", (data, callback) => {
-    console.log(data);
-    addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, callback, io);
+  socket.on("add-user-into-room", async (data, callback) => {
+    console.log("add user into room.");
+    callback(await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io));
   })
 
-  socket.on("update-user-in-room", (data, callback) => {
-    console.log(data);
-    updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, callback, io);
+  socket.on("update-user-in-room", async (data, callback) => {
+    console.log("update user in room.");
+    callback(await updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, io));
   })
 
-  socket.on("remove-user-from-room", (data, callback) => {
-    console.log(data);
-    removeUserFromRoom(data.user_id, data.room_id, callback, io);
-
+  socket.on("remove-user-from-room", async (data, callback) => {
+    console.log("remove user from room.");
+    callback(await removeUserFromRoom(data.user_id, data.room_id, io));
   })
 
-  socket.on('create-room', (data,callback) => {
-    console.log('部屋を作ります。')
+  socket.on('create-room', async (data,callback) => {
+    console.log('create room.');
     var path = `./${ picture_directory }/${generateRandomString(12)}.png`
     while(isExisted(path)){
       path = `./${ picture_directory }/${generateRandomString(12)}.png`
     }
     const image =(data.picture)? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
     fs.writeFileSync(path, image, 'base64');
-    createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path, callback);
+    const result = await createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path, callback);
+    if(!result.status)
+      callback(result)
+    const room = await getRoomStatusForUser(result.data.rows[0].chatroom_id, result.data.rows[0].user_id);
+    callback(room);
   });
 
   socket.on('select-all-room', (data, callback) => {
-    console.log('select all room.\n', data);
+    console.log('select all room.');
     selectAllRoom(callback);
   });
 
@@ -490,9 +257,9 @@ io.on('connection', socket => {
     updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, data.user_id, callback);
   })
 
-  socket.on('delete-room', (data, callback) => {
-    console.log('delete room.\n', data);
-    deleteRoom(data.room_id, callback);
+  socket.on('delete-room', async (data, callback) => {
+    console.log('delete room.');
+    callback(await deleteRoom(data.room_id));
   });
 
   socket.on('select-all-user', (data, callback) => {
@@ -500,19 +267,23 @@ io.on('connection', socket => {
     selectAllUser(callback);
   });
 
-  socket.on('select-users-in-room', (data, callback) => {
+  socket.on('select-users-in-room', async (data, callback) => {
     console.log('select users in room.');
-    selectUsersInRoom(data.room_id, callback);
+    const users = await selectUsersInRoom(data.room_id);
+    if(!users.status)
+      callback(users);
+    callback({ rows: users.data });
   });
 
-  socket.on('update-user', (data, callback) => {
+  socket.on('update-user', async (data, callback) => {
     console.log('update user.');
-    updateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority, callback);
+    const result = await checkAndUpdateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority);
+    callback(result);
   });
 
-  socket.on('delete-user', (data, callback) => {
+  socket.on('delete-user', async (data, callback) => {
     console.log('delete user.\n', data);
-    deleteUser(data.user_id, callback);
+    callback(deleteUser(data.user_id));//欠陥あり
   })
 
   socket.on('log-out', (data, callback) => {
@@ -527,8 +298,8 @@ io.on('connection', socket => {
   /**
    * 新しい部屋に追加された時に取得するデータ.
    */
-  socket.on('get-single-room', (data, callback) => {
-    getSingleRoom(data.user_id, data.room_id, callback);
+  socket.on('get-single-room', async (data, callback) => {
+    callback(await getSingleRoom(data.user_id, data.room_id));
   })
 
   socket.on('enter-new-room', (data, callback) => {
@@ -537,94 +308,44 @@ io.on('connection', socket => {
     callback({message: "新しい部屋に登録されました。"});
   });
 
-  socket.on('get-invited-room', (data, callback) => {
-    pool.query(`SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, B.path AS picture FROM chatroom AS A
-    JOIN picture_table AS B ON A.icon = B.id
-    WHERE A.id = $1;`, [data.room_id])
-    .then((response) => {
-      let room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+  socket.on('get-invited-room', async (data, callback) => {
+    const room = await getRoomStatus(data.room_id);
+    if(room.status)
+      callback(room.data);
+    else
       callback(room);
-    })
-    .catch((error) => {
-      console.log(error);
-      callback({message: 'Error occurs!'});
-    })
   })
 
-  socket.on('get-friend-list', (data, callback) => {
-    pool.query(`SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
-    FROM user_table AS A
-    JOIN picture_table AS B ON B.id = A.image
-    JOIN (
-      SELECT *
-      FROM user_friend_unit AS A
-      WHERE A.user_id = $1
-    ) AS C ON A.id = C.friend_id;`, [data.user_id])
-    .then(response => {
-      let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-      callback(friends);
-    })
-    .catch(error => {
-      console.log(error);
-      callback({message: error.message});
-    })
+  socket.on('get-friend-list', async (data, callback) => {
+    const friends = await selectUsersFriends(data.user_id);
+    if(!friends.status)
+      return friends;
+    callback(friends.data);
   })
 
-  socket.on('search-user', (data, callback) => {
-    pool.query(`SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
-    FROM user_table AS A
-    JOIN picture_table AS B ON B.id = A.image
-    WHERE A.id like $1;`, [data.user_id])
-    .then((response) => {
-      let user = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+  socket.on('search-user', async (data, callback) => {
+    const user = await selectUserWithId(data.user_id);
+    if(!user.status)
       callback(user);
-    })
-    .catch((error) => {
-      console.log(error);
-      callback({message:error.message});
-    })
+    callback(user.data);
   })
 
-  socket.on('connect-to-friend', (data, callback) => {
-    pool.query(`INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`, [data.user_id, data.friend_id])
-    .then((response) => {
-      callback({ message: '追加しました。', status: true });
-    })
-    .catch((error) => {
-      console.log(error);
-      callback({ message: error.message, status: false });
-    })
+  socket.on('connect-to-friend', async (data, callback) => {
+    const result = await insertIntoUserFriendUnit(data.user_id, data.friend_id);
+    callback(result);
   })
 
-  socket.on('notice-reading-tweet', (data, callback) => {
-    pool.query('INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);', [data.user_id, data.tweet_id])
-    .then(response => {
-      pool.query(`SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
-        JOIN(-- 呟きに対する既読数
-            SELECT tweet.id, COUNT(A.tweet_id)::int
-            FROM tweet
-            LEFT JOIN (
-                SELECT tweet_id
-                FROM user_tweet_unit
-            ) AS A ON tweet.id = A.tweet_id
-            GROUP BY tweet.id
-        ) AS A ON A.id = tweet.id
-        WHERE tweet.id = $1;`, [data.tweet_id])
-      .then(response => {
-        const room_id = response.rows[0].room_id;
-        callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
-        io.to(room_id).emit('update-tweet-information', { data: response.rows[0] });
-      })
-      .catch(error => {
-        // console.log(error);
-        console.log('既に読まれています。\t', error.detail);
-        callback({message: error.detail, status: false});
-      })
-    })
-    .catch(error => {
-      console.log(error);
-      callback({message: "エラーが生じました。", status: false});
-    })
+  socket.on('notice-reading-tweet', async (data, callback) => {
+    const insert = await insertIntoUserTweetUnit(data.user_id, data.tweet_id);
+    if(!insert.status)
+      callback(insert)
+    const tweet = await getTweetCount(data.tweet_id);
+    if(!tweet.status)
+      callback(tweet);
+    const room_id = tweet.data.rows[0].room_id;
+    callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
+    io.to(room_id).emit('update-tweet-information', { data: tweet.data.rows[0] });
+
   })
 
   function generateRandomString(length) {
@@ -639,21 +360,21 @@ function generateRandomString(length) {
 // expressで静的ページにアクセスする.
 app.use(express.urlencoded({extended: true, limit: '10mb'}));
 app.use(express.static(path.join(__dirname, 'static')));
+app.use(express.json())
 
-app.get("/disconnected", function (request, response) {
+app.post("/disconnected", function (request, response) {
   console.log('request:')
   console.log(request)
-  
   console.log('response:')
   console.log(response)
   response.set({ 'Access-Control-Allow-Origin': '*' })
-  response.json({message: "OK!"});
+  response.json({message: "OK!", data: request.body});
 });
 
 /**
  * ユーザーを作成するのと同時にそのユーザー専用のRoomを作成する。
  */
-app.post("/sign-on/check", function (request, response) {
+app.post("/sign-on/check", async function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' });
   const data = request.body;
   var path = `./${ picture_directory }/${generateRandomString(12)}.png`
@@ -662,5 +383,6 @@ app.post("/sign-on/check", function (request, response) {
   }
   const image =(data.picture!=='null')? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
   fs.writeFileSync(path, image, 'base64');
-  addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
+  const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
+  response.json(result);
 });
