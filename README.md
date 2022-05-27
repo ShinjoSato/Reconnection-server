@@ -43,3 +43,9 @@
   # パスワードは"password"
   psql -U postgres -d postgres -h localhost -p 15432
   ```
+
+- Macで```tsc```コマンドを実行する際
+    実行する前にパスを通す必要があるので以下のコマンドを実行させる。
+    ```sh
+    PATH=/Users/shinjo/.npm-global/bin:$PATH
+    ```

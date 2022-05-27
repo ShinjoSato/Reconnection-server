@@ -2,7 +2,9 @@
 node_modules
 images/*
 docs/*
+logs/*
 
 # File
 Memo.md
 *.js
+yarn.lock

@@ -8,6 +8,17 @@ const pool_data = {
   port: 5432 //15432
 }
 const pool = new Pool(pool_data);
+import { configure, getLogger } from "log4js";
+configure({
+  appenders: {
+    out: { type: 'stdout' },
+    app: { type: 'file', filename: './logs/disconnected', pattern: "yyyy-MM-dd.log", keepFileExt: false, alwaysIncludePattern: true, daysToKeep: 10, maxLogSize: 1000000 }
+  },
+  categories: {
+    default: { appenders: ['out', 'app'], level: 'info' }
+  }
+});
+const logger = getLogger();
 
 import { getImage, saveImage } from "./system";
 
@@ -17,7 +28,7 @@ function insertIntoPicture(label: String, path: String) {
   return pool.query(sql, [label, path]).then(async (response) => {
     return { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー", status: false };
   })
 }
@@ -28,7 +39,7 @@ function deleteFromPicture(id: String) {
   return pool.query(sql, [id]).then(async (response) => {
     return { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー", status: false };
   })
 }
@@ -39,7 +50,7 @@ function insertIntoTweet(text: String, room_id: String, user_id: String, head: S
   return pool.query(sql, [text, room_id, user_id, head]).then(async (response) => {
     return { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー", status: false };
   })
 }
@@ -50,7 +61,7 @@ function deleteFromTweetInRoom(room_id: number) {
   return pool.query(sql, [room_id]).then(async (res) => {
     return { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -62,7 +73,7 @@ function deleteFromTweetByUser(user_id: String) {
   return pool.query(sql, [user_id]).then(async (res) => {
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -73,7 +84,7 @@ function insertIntoPicTweet(text: String, room_id: String, user_id: String, pict
   return pool.query(sql, [text, room_id, user_id, picture_id, head]).then(async (response) => {
     return { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー", status: false };
   })
 }
@@ -100,7 +111,7 @@ function getSingleTweet(tweet_id: String) {
     return { message: "サクセス", status: true, data: tweet };
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return {message: "エラー", status: false};
   })
 }
@@ -124,7 +135,7 @@ function getTweetCount(tweet_id: String) {
     return { status: true, data: response };
   })
   .catch(error => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: error.detail };
   })
 }
@@ -136,6 +147,7 @@ function insertIntoUser(id: String, name: String, pass: String, image_id: String
   .then(async (response) => {
     return await { data: response, status: true };  
   }).catch((error) => {
+    logger.error(error);
     return { message: "エラー", status: false };
   })
 }
@@ -147,7 +159,7 @@ function deleteFromUser(id: String) {
   return pool.query(sql, [id]).then(async (res) => {
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -160,7 +172,7 @@ function insertIntoUserTweetUnit(user_id: string, tweet_id: number) {
     return { message: '追加しました。', status: true };
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: error.message, status: false };
   })
 }
@@ -173,7 +185,7 @@ function insertIntoUserFriendUnit(user_id: string, friend_id: string) {
     return { message: '追加しました。', status: true };
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: error.message, status: false };
   })
 }
@@ -186,7 +198,7 @@ function insertIntoUserRoomUnit(user_id: string, room_id: number, authority: boo
     return { data: response, status: true };
   })
   .catch(err=>{
-    console.log(err);
+    logger.error(err);
     return { status: false, message: "エラーが発生しました。" };
   })
 }
@@ -198,7 +210,7 @@ function deleteFromUserRoomUnitByRoom(room_id: number) {
   return pool.query(sql, [room_id]).then(async (res) => {
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -210,7 +222,7 @@ function deleteFromUserRoomUnitByUserm(user_id: String) {
   return pool.query(sql, [user_id]).then(async (res) => {
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -278,7 +290,7 @@ async function updateUserInRoom(user_id: string, room_id: number, opening: boole
     return await sendUpdatedRoomUsers(user_id, room_id, io);
   })
   .catch(error => {
-    console.log(error);
+    logger.error(error);
     return {message: "失敗", status: false};
   })
 }
@@ -296,7 +308,7 @@ async function removeUserFromRoom(user_id: string, room_id: number, io: any){
     return await sendUpdatedRoomUsers(user_id, room_id, io);
   })
   .catch(error => {
-    console.log(error);
+    logger.error(error);
     return {message: "失敗", status: false};
   })
 }
@@ -319,7 +331,7 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
     return {message: `Update ROOM successfully!`, status: true};
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return {message: `Error from adding user into room.`, status: false};
   })
 }
@@ -358,7 +370,7 @@ function deleteFromRoom(room_id: number) {
   return pool.query(sql, [room_id]).then(async (res) => {
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "削除に失敗しました。" };
   })
 }
@@ -371,7 +383,7 @@ function selectAllRoom(callback: Function){
     callback({data: rows});
   })
   .catch((err) => {
-    console.log(err);
+    logger.error(err);
     callback({message: "roomを取得できませんでした。"});
   });
 }
@@ -394,7 +406,7 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
     }
   })
   .catch((err) => {
-    console.log(err);
+    logger.error(err);
     callback({message: "cannnot update room", status: false});
   })
 }
@@ -408,7 +420,7 @@ function getRoomStatus(id: number) {
     const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
     return { data: room, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが生じました。", status: false };
   })
 }
@@ -425,7 +437,7 @@ function getRoomStatusForUser(room_id: number, user_id: string) {
     const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
     return { data: room, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが生じました。", status: false };
   })
 }
@@ -451,7 +463,7 @@ function selectAllUser(callback: Function){
     callback({data: rows});
   })
   .catch((err) => {
-    console.log(err);
+    logger.error(err);
     callback({message: "取得に失敗しました。"});
   })
 }
@@ -469,7 +481,7 @@ function selectUsersInRoom(room_id: string){
     return { status: true, data: users };
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: error.detail };
   })
 }
@@ -490,7 +502,7 @@ function selectUsersFriends(user_id: string) {
     return { status: true, data: friends };
   })
   .catch(error => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: error.detail };
   })
 }
@@ -513,7 +525,7 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
     return { status: true, data: rows };
   })
   .catch((err) => {
-    console.log(err);
+    logger.error(err);
     return { status: false, message: err.detail };
   });
 }
@@ -524,7 +536,7 @@ function getUserProfile(user_id: string) {
   return pool.query(sql, [user_id]).then(async (response) => {
     return await { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが発生しました。", status: false };
   })
 }
@@ -535,7 +547,7 @@ function getUserProfileWithPass(user_id: string, password: string) {
   return pool.query(sql, [user_id, password]).then(async (response) => {
     return await { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが発生しました。", status: false };
   })
 }
@@ -546,7 +558,7 @@ function updateUser(id: string, name: string, mail: string, authority: boolean) 
   return pool.query(sql, [name, mail, authority, id]).then(async (response) => {
     return await { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが発生しました。", status: false };
   })
 }
@@ -557,7 +569,7 @@ function selectUserWithPass(id: string, password: string) {
   return pool.query(sql, [id, password]).then(async (response) => {
     return await { data: response, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが発生しました。", status: false };
   })
 }
@@ -572,7 +584,7 @@ function selectUserWithId(keyword: string) {
     let user = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
     return await { data: user, status: true };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラーが発生しました。", status: false };
   })
 }
@@ -689,7 +701,7 @@ function getTweetInSingleRoom(user_id: String, room_id: number) {
     });
     return { status: true, data: tweets };
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "エラー1" };
   })
 }
@@ -747,7 +759,7 @@ function getTweetInEachRoom(user_id: String) {
     });
     return tweets;
   }).catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー1" };
   })
 }
@@ -791,7 +803,7 @@ function getPicTweetInSingleRoom(user_id: String, room_id: number) {
     var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture), user_icon: getImage(row.user_icon) }; });
     return { status: true, data: tweets };
   }).catch((error2) => {
-    console.log(error2);
+    logger.error(error2);
     return { status: false, message: "エラー2" };
   })
 }
@@ -845,7 +857,7 @@ function getPicTweetInEachRoom(user_id: String) {
     var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
     return tweets;
   }).catch((error2) => {
-    console.log(error2);
+    logger.error(error2);
     return { message: "エラー2" };
   })
 }
@@ -870,7 +882,7 @@ function getInitialRoom(user_id: String) {
     // return rooms;
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "エラー3" };
   })
 }
@@ -895,7 +907,7 @@ function getRoomsUserBelong(user_id: String) {
     return rooms;
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー4" };
   })
 }
@@ -913,7 +925,7 @@ function getMemberInRoom(room_id: number) {
     return { status: true, data: users };
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { status: false, message: "エラー5" };
   })
 }
@@ -942,7 +954,7 @@ function getMemberInEachRoom(user_id: String) {
     return users;
   })
   .catch((error) => {
-    console.log(error);
+    logger.error(error);
     return { message: "エラー5" };
   })
 }

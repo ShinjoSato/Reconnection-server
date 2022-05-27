@@ -41,6 +41,17 @@ import {
 } from "./src/psql";
 
 import { getImage, setImage, isExisted } from "./src/system";
+import { configure, getLogger } from "log4js";
+configure({
+  appenders: {
+    out: { type: 'stdout' },
+    app: { type: 'file', filename: './logs/disconnected', pattern: "yyyy-MM-dd.log", keepFileExt: false, alwaysIncludePattern: true, daysToKeep: 10, maxLogSize: 1000000 }
+  },
+  categories: {
+    default: { appenders: ['out', 'app'], level: 'info' }
+  }
+});
+const logger = getLogger();
 
 // socket.io
 const host = 'localhost'; //'172.31.44.151';
@@ -48,7 +59,7 @@ const port = 8528; //8528, 8000
 const server = http.createServer(app).listen(port, host, () => {
   console.log('server start. port=' + port);
 });
-const io = require('socket.io')(server);
+const io = require('socket.io')(server, {pingTimeout: 180000, pingInterval: 5000});// {pingTimeout: 10000, pingInterval: 30000}
 
 // PostgreSQL
 const { Pool } = require('pg');
@@ -83,7 +94,9 @@ io.on('connection', socket => {
     console.log(`disconnect: %s, %s`, reason, socket.id);
   });
 
+  // 以下の関数で接続できなかった時にも値を返せる様にしたい（存在しないID, パスワードが一致しないなど）
   socket.on('connect-to-server', (data, callback) => {
+    logger.info(`socket.on:${ "connect-to-server" },\tkeys:${ Object.keys(data) },\tuserId:${ data.userId }`);
     const tmp_pool = new Pool(pool_data)
     tmp_pool.connect().then(async client => {
 
@@ -106,12 +119,12 @@ io.on('connection', socket => {
       
     })
     .catch(err => {
-      console.log(err)
+      logger.error(err)
     })
   })
 
   socket.on('chat', async (data, callback) => {
-    console.log(`chat.`);
+    logger.info(`socket.on:${ "chat" },\tkeys:${ Object.keys(data) },\ttext:${ data.text },\tuser:${ data.user },\troom:${ data.room }`);
     if(data.picture){// With picture
       var path = `${ picture_directory }/${generateRandomString(12)}.png`
       while(isExisted(path)){
@@ -125,7 +138,7 @@ io.on('connection', socket => {
           console.log('通知を送る test2')
           io.to(data.room).emit('receive-notification', result.data[0])
         }
-        callback({ status: true, message: "success!" });
+        callback({ status: true, message: "chat with picture success!" });
       })
     }else{// Without pictures
       const insert = await insertIntoTweet(data.text, data.room, data.user, data.head);
@@ -134,12 +147,12 @@ io.on('connection', socket => {
         console.log('通知を送る')
         io.to(data.room).emit('receive-notification', result.data[0])
       }
-      callback({ status: true, message: "success!" });
+      callback({ status: true, message: "chat without picture success!" });
     }
   })
 
   socket.on('first-login-room', async (data, callback) => {
-    console.log(`first login room.`);
+    logger.info(`socket.on:${ "first-login-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id }`);
     const rooms = await getInitialRoom(data.id);
     if(!rooms.status)
       callback(rooms);
@@ -218,22 +231,22 @@ io.on('connection', socket => {
   });
 
   socket.on("add-user-into-room", async (data, callback) => {
-    console.log("add user into room.");
+    logger.info(`socket.on:${ "add-user-into-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
     callback(await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io));
   })
 
   socket.on("update-user-in-room", async (data, callback) => {
-    console.log("update user in room.");
+    logger.info(`socket.on:${ "update-user-in-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
     callback(await updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, io));
   })
 
   socket.on("remove-user-from-room", async (data, callback) => {
-    console.log("remove user from room.");
+    logger.info(`socket.on:${ "remove-user-from-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
     callback(await removeUserFromRoom(data.user_id, data.room_id, io));
   })
 
   socket.on('create-room', async (data,callback) => {
-    console.log('create room.');
+    logger.info(`socket.on:${ "create-room" },\tkeys:${ Object.keys(data) },\troomName:${ data.roomName },\tuserId:${ data.userId }`);
     var path = `./${ picture_directory }/${generateRandomString(12)}.png`
     while(isExisted(path)){
       path = `./${ picture_directory }/${generateRandomString(12)}.png`
@@ -253,12 +266,12 @@ io.on('connection', socket => {
   });
 
   socket.on('update-room', (data, callback) => {
-    console.log('update room.');
+    logger.info(`socket.on:${ "update-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);
     updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, data.user_id, callback);
   })
 
   socket.on('delete-room', async (data, callback) => {
-    console.log('delete room.');
+    logger.info(`socket.on:${ "delete-room" },\tkeys:${ Object.keys(data) },\troom_id:${ data.room_id }`);
     callback(await deleteRoom(data.room_id));
   });
 
@@ -276,18 +289,18 @@ io.on('connection', socket => {
   });
 
   socket.on('update-user', async (data, callback) => {
-    console.log('update user.');
+    logger.info(`socket.on:${ "update-user" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);
     const result = await checkAndUpdateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority);
     callback(result);
   });
 
   socket.on('delete-user', async (data, callback) => {
-    console.log('delete user.\n', data);
+    logger.info(`socket.on:${ "delete-user" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id }`);
     callback(deleteUser(data.user_id));//欠陥あり
   })
 
   socket.on('log-out', (data, callback) => {
-    console.log('log out.');
+    logger.info(`socket.on:${ "log-out" },\tkeys:${ Object.keys(data) }`);
     for(const room of CHATROOMS){
       socket.leave(room);
     }
@@ -331,6 +344,7 @@ io.on('connection', socket => {
   })
 
   socket.on('connect-to-friend', async (data, callback) => {
+    logger.info(`socket.on:${ "connect-to-friend" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\tfriend_id:${ data.friend_id }`);
     const result = await insertIntoUserFriendUnit(data.user_id, data.friend_id);
     callback(result);
   })
@@ -363,6 +377,7 @@ app.use(express.static(path.join(__dirname, 'static')));
 app.use(express.json())
 
 app.post("/disconnected", function (request, response) {
+  logger.info(`/disconnected,\trequest:${ request },\tresponse:${ response }`);
   console.log('request:')
   console.log(request)
   console.log('response:')
@@ -377,6 +392,7 @@ app.post("/disconnected", function (request, response) {
 app.post("/sign-on/check", async function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' });
   const data = request.body;
+  logger.info(`${ "/sign-on/check" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\tuser_name:${ data.user_name }`);
   var path = `./${ picture_directory }/${generateRandomString(12)}.png`
   while(isExisted(path)){
     path = `./${ picture_directory }/${generateRandomString(12)}.png`
@@ -384,5 +400,6 @@ app.post("/sign-on/check", async function (request, response) {
   const image =(data.picture!=='null')? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
   fs.writeFileSync(path, image, 'base64');
   const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
+  logger.info(`result of /sign-on/check:${ result }`);
   response.json(result);
 });
