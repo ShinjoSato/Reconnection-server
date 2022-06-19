@@ -7,7 +7,6 @@ const pool_data = {
   password: 'password',
   port: 5432 //15432
 }
-const pool = new Pool(pool_data);
 import { configure, getLogger } from "log4js";
 configure({
   appenders: {
@@ -24,8 +23,10 @@ import { getImage, saveImage } from "./system";
 
 function insertIntoPicture(label: String, path: String) {
   console.log("insert into picture.")
+  const pool = new Pool(pool_data);
   const sql = `insert into picture_table(label,path) values($1,$2) returning *;`
   return pool.query(sql, [label, path]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -35,8 +36,10 @@ function insertIntoPicture(label: String, path: String) {
 
 function deleteFromPicture(id: String) {
   console.log("delete from picture.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM picture_table WHERE id = $1;";
   return pool.query(sql, [id]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -46,8 +49,10 @@ function deleteFromPicture(id: String) {
 
 function insertIntoTweet(text: String, room_id: String, user_id: String, head: String) {
   console.log("insert into tweet.")
+  const pool = new Pool(pool_data);
   const sql = `insert into tweet(tweet,room_id,user_id,head) values($1,$2,$3,$4) RETURNING *;`
   return pool.query(sql, [text, room_id, user_id, head]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -57,8 +62,10 @@ function insertIntoTweet(text: String, room_id: String, user_id: String, head: S
 
 function deleteFromTweetInRoom(room_id: number) {
   console.log("delete from tweet in room.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM tweet WHERE room_id=$1;";
   return pool.query(sql, [room_id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -69,8 +76,10 @@ function deleteFromTweetInRoom(room_id: number) {
 function deleteFromTweetByUser(user_id: String) {
   // これでは他のユーザーもいるルームの呟きも削除されてしまうので、「削除されましたユーザー」も作成しときたい。
   console.log("delete from tweet by user.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM tweet WHERE (user_id)=($1);";
   return pool.query(sql, [user_id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -80,8 +89,10 @@ function deleteFromTweetByUser(user_id: String) {
 
 function insertIntoPicTweet(text: String, room_id: String, user_id: String, picture_id: String, head: String) {
   console.log("insert into pic-tweet.")
+  const pool = new Pool(pool_data);
   const sql = `insert into tweet(tweet,room_id,user_id,picture_id,head) values($1,$2,$3,$4,$5) RETURNING *;`
   return pool.query(sql, [text, room_id, user_id, picture_id, head]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -91,6 +102,7 @@ function insertIntoPicTweet(text: String, room_id: String, user_id: String, pict
 
 function getSingleTweet(tweet_id: String) {
   console.log("get single-tweet.")
+  const pool = new Pool(pool_data);
   const sql = `
     select tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
     join (
@@ -108,6 +120,7 @@ function getSingleTweet(tweet_id: String) {
       }
       return tmp;
     });
+    pool.end().then(() => console.log('pool has ended'));
     return { message: "サクセス", status: true, data: tweet };
   })
   .catch((error) => {
@@ -119,6 +132,7 @@ function getSingleTweet(tweet_id: String) {
 
 function getTweetCount(tweet_id: String) {
   console.log("get tweet-count.");
+  const pool = new Pool(pool_data);
   const sql = `SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
   JOIN(-- 呟きに対する既読数
       SELECT tweet.id, COUNT(A.tweet_id)::int
@@ -132,6 +146,7 @@ function getTweetCount(tweet_id: String) {
   WHERE tweet.id = $1;`
   return pool.query(sql, [tweet_id])
   .then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: response };
   })
   .catch(error => {
@@ -142,9 +157,11 @@ function getTweetCount(tweet_id: String) {
 
 function insertIntoUser(id: String, name: String, pass: String, image_id: String, mail: String, authority: Boolean) {
   console.log("insert into user.")
+  const pool = new Pool(pool_data);
   const sql = "insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;";
   return pool.query(sql, [id, name, pass, image_id, mail, authority])
   .then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };  
   }).catch((error) => {
     logger.error(error);
@@ -155,8 +172,10 @@ function insertIntoUser(id: String, name: String, pass: String, image_id: String
 
 function deleteFromUser(id: String) {
   console.log("delete from user.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_table WHERE id=$1 RETURNING *;";
   return pool.query(sql, [id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -166,9 +185,11 @@ function deleteFromUser(id: String) {
 
 function insertIntoUserTweetUnit(user_id: string, tweet_id: number) {
   console.log("insert into user tweet unit.");
+  const pool = new Pool(pool_data);
   const sql = `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);`
   return pool.query(sql, [user_id, tweet_id])
   .then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { message: '追加しました。', status: true };
   })
   .catch((error) => {
@@ -179,9 +200,11 @@ function insertIntoUserTweetUnit(user_id: string, tweet_id: number) {
 
 function insertIntoUserFriendUnit(user_id: string, friend_id: string) {
   console.log("insert into user friend unit.");
+  const pool = new Pool(pool_data);
   const sql = `INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`
   return pool.query(sql, [user_id, friend_id])
   .then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return { message: '追加しました。', status: true };
   })
   .catch((error) => {
@@ -193,8 +216,10 @@ function insertIntoUserFriendUnit(user_id: string, friend_id: string) {
 
 function insertIntoUserRoomUnit(user_id: string, room_id: number, authority: boolean, opening: boolean, posting: boolean) {
   console.log("insert into user-room unit.")
+  const pool = new Pool(pool_data);
   return pool.query("INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;",[user_id, room_id, authority, opening, posting])
   .then(async response => {
+    pool.end().then(() => console.log('pool has ended'));
     return { data: response, status: true };
   })
   .catch(err=>{
@@ -206,8 +231,10 @@ function insertIntoUserRoomUnit(user_id: string, room_id: number, authority: boo
 
 function deleteFromUserRoomUnitByRoom(room_id: number) {
   console.log("delete from user-room unit by room.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;";
   return pool.query(sql, [room_id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -218,8 +245,10 @@ function deleteFromUserRoomUnitByRoom(room_id: number) {
 
 function deleteFromUserRoomUnitByUserm(user_id: String) {
   console.log("delete from user-room unit by user.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_chatroom_unit WHERE (user_id)=($1);";
   return pool.query(sql, [user_id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -237,10 +266,12 @@ function deleteFromUserRoomUnitByUserm(user_id: String) {
  */
 function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_name: string, user_id: string, open_level: number, post_level: number){
   console.log("create user-room.")
+  const pool = new Pool(pool_data);
   return pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES($1,$2,$3,$4) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level])
   .then(async re=>{
     const insertRoom = re.rows.map(x => { return { ...x }; });
     const userRoomUnit = await insertIntoUserRoomUnit(user_id, re.rows[0].id, true, true, true);
+    pool.end().then(() => console.log('pool has ended'));
     return userRoomUnit;
   })
   .catch(erro=>{
@@ -285,8 +316,10 @@ async function addUserIntoRoom(user_id: string, room_id: number, opening: boolea
  */
 async function updateUserInRoom(user_id: string, room_id: number, opening: boolean, posting: boolean, io: any){
   console.log(user_id, room_id);
+  const pool = new Pool(pool_data);
   return pool.query("UPDATE user_chatroom_unit SET (opening, posting) = ($1, $2) WHERE (user_id, chatroom_id) = ($3, $4);", [opening, posting, user_id, room_id])
   .then(async response => {
+    pool.end().then(() => console.log('pool has ended'));
     return await sendUpdatedRoomUsers(user_id, room_id, io);
   })
   .catch(error => {
@@ -303,8 +336,10 @@ async function updateUserInRoom(user_id: string, room_id: number, opening: boole
  */
 async function removeUserFromRoom(user_id: string, room_id: number, io: any){
   console.log("remove user from room.")
+  const pool = new Pool(pool_data);
   return pool.query("DELETE FROM user_chatroom_unit WHERE (user_id, chatroom_id) = ($1,$2);", [user_id, room_id])
   .then(async response => {
+    pool.end().then(() => console.log('pool has ended'));
     return await sendUpdatedRoomUsers(user_id, room_id, io);
   })
   .catch(error => {
@@ -320,6 +355,7 @@ async function removeUserFromRoom(user_id: string, room_id: number, io: any){
  * @param io {any} ソケット接続されている端末に送信する為の変数。
  */
 function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
+  const pool = new Pool(pool_data);
   return pool.query(`SELECT user_table.id AS user_id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
   JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
@@ -328,6 +364,7 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
     var rows = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
     io.to(room_id).emit('update-room-user', { rows, room_id });
     io.to(`@${user_id}`).emit('receive-invitation-from-room', { user_id, room_id });
+    pool.end().then(() => console.log('pool has ended'));
     return {message: `Update ROOM successfully!`, status: true};
   })
   .catch((error) => {
@@ -347,6 +384,7 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
  */
 async function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
     console.log("add user with picture.");
+    const pool = new Pool(pool_data);
     const pict = await insertIntoPicture(picture_label, picture_path);
     if(!pict.status)
       return pict;
@@ -366,8 +404,10 @@ async function addUserWithPicture(user_id: string, user_name: string, user_passw
 
 function deleteFromRoom(room_id: number) {
   console.log("delete from room.")
+  const pool = new Pool(pool_data);
   const sql = "DELETE FROM chatroom WHERE (id)=($1);";
   return pool.query(sql, [room_id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { status: true, message: "削除に成功しました。" };
   }).catch((error) => {
     logger.error(error);
@@ -377,9 +417,11 @@ function deleteFromRoom(room_id: number) {
 
 function selectAllRoom(callback: Function){
   console.log("select all room.");
+  const pool = new Pool(pool_data);
   pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id;")
   .then((res) => {
     var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     callback({data: rows});
   })
   .catch((err) => {
@@ -390,6 +432,7 @@ function selectAllRoom(callback: Function){
 
 function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, user_id: string, callback: Function){
   console.log("update room.");
+  const pool = new Pool(pool_data);
   pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then(async (res) => {
     if(res.rows.length==1){
@@ -400,6 +443,7 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
         console.log(room.data);
         if(picture)
           saveImage(room.data[0].picture_path, picture);
+        pool.end().then(() => console.log('pool has ended'));
         callback({message: 'update room success!', status: true, data: room.data, id })
     }else{
       callback({message: "error update room", status: false});
@@ -413,11 +457,13 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
 
 function getRoomStatus(id: number) {
   console.log("get room status.")
+  const pool = new Pool(pool_data);
   const sql = `SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, B.path AS picture_path, B.path AS picture FROM chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
   WHERE A.id = $1;`;
   return pool.query(sql, [id]).then(async (response) => {
     const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
     return { data: room, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -427,6 +473,7 @@ function getRoomStatus(id: number) {
 
 function getRoomStatusForUser(room_id: number, user_id: string) {
   console.log("get room status for user.");
+  const pool = new Pool(pool_data);
   const sql = `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture_path, B.path AS picture from chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
   JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
@@ -435,6 +482,7 @@ function getRoomStatusForUser(room_id: number, user_id: string) {
   ORDER BY A.id;`;
   return pool.query(sql, [room_id, user_id]).then(async (response) => {
     const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
     return { data: room, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -444,6 +492,7 @@ function getRoomStatusForUser(room_id: number, user_id: string) {
 
 async function deleteRoom(room_id: number){
   console.log("delete room.")
+  const pool = new Pool(pool_data);
   const del_unit = await deleteFromUserRoomUnitByRoom(room_id); 
   if(!del_unit.status)
     return del_unit;
@@ -457,9 +506,11 @@ async function deleteRoom(room_id: number){
 
 function selectAllUser(callback: Function){
   console.log("select all user.")
+  const pool = new Pool(pool_data);
   pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
   .then((res) => {
     var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     callback({data: rows});
   })
   .catch((err) => {
@@ -470,6 +521,7 @@ function selectAllUser(callback: Function){
 
 function selectUsersInRoom(room_id: string){
   console.log("select users in room.")
+  const pool = new Pool(pool_data);
   return pool.query(`
   SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
   JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
@@ -478,6 +530,7 @@ function selectUsersInRoom(room_id: string){
   `, [room_id])
   .then(async (response) => {
     var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: users };
   })
   .catch((error) => {
@@ -488,6 +541,7 @@ function selectUsersInRoom(room_id: string){
 
 function selectUsersFriends(user_id: string) {
   console.log("select users friends.");
+  const pool = new Pool(pool_data);
   const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
   FROM user_table AS A
   JOIN picture_table AS B ON B.id = A.image
@@ -499,6 +553,7 @@ function selectUsersFriends(user_id: string) {
   return pool.query(sql, [user_id])
   .then(async (response) => {
     let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: friends };
   })
   .catch(error => {
@@ -509,6 +564,7 @@ function selectUsersFriends(user_id: string) {
 
 function selectFriendNotInRoom(room_id: string, user_id: string) {
   console.log("select friend not in room.")
+  const pool = new Pool(pool_data);
   const sql = `
   SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
   JOIN picture_table ON user_table.image = picture_table.id
@@ -522,6 +578,7 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
   return pool.query(sql, [room_id, user_id])
   .then(async (res) => {
     var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: rows };
   })
   .catch((err) => {
@@ -532,8 +589,10 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
 
 function getUserProfile(user_id: string) {
   console.log("get user-profile.")
+  const pool = new Pool(pool_data);
   const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1;";
   return pool.query(sql, [user_id]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -543,8 +602,10 @@ function getUserProfile(user_id: string) {
 
 function getUserProfileWithPass(user_id: string, password: string) {
   console.log("get user-profile with pass.")
+  const pool = new Pool(pool_data);
   const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1 AND pgp_sym_decrypt(A.password, 'password') = $2;";
   return pool.query(sql, [user_id, password]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -554,8 +615,10 @@ function getUserProfileWithPass(user_id: string, password: string) {
 
 function updateUser(id: string, name: string, mail: string, authority: boolean) {
   console.log("update user.");
+  const pool = new Pool(pool_data);
   const sql = "UPDATE user_table SET (name,mail,authority) = ($1,$2,$3) WHERE id = $4 RETURNING *;";
   return pool.query(sql, [name, mail, authority, id]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -565,8 +628,10 @@ function updateUser(id: string, name: string, mail: string, authority: boolean) 
 
 function selectUserWithPass(id: string, password: string) {
   console.log("select user with pass.")
+  const pool = new Pool(pool_data);
   const sql = "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;";
   return pool.query(sql, [id, password]).then(async (response) => {
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -576,12 +641,14 @@ function selectUserWithPass(id: string, password: string) {
 
 function selectUserWithId(keyword: string) {
   console.log("select user with id.")
+  const pool = new Pool(pool_data);
   const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
   FROM user_table AS A
   JOIN picture_table AS B ON B.id = A.image
   WHERE A.id like $1;`;
   return pool.query(sql, [keyword]).then(async (response) => {
     let user = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
     return await { data: user, status: true };
   }).catch((error) => {
     logger.error(error);
@@ -660,6 +727,7 @@ async function getSingleRoom(user_id: string, room_id: number){
 
 function getTweetInSingleRoom(user_id: String, room_id: number) {
   console.log("get tweet in single room.");
+  const pool = new Pool(pool_data);
   const sql = `SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
   JOIN (
       SELECT user_table.id,user_table.name,picture_table.path FROM user_table
@@ -699,6 +767,7 @@ function getTweetInSingleRoom(user_id: String, room_id: number) {
       }
       return tmp;
     });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: tweets };
   }).catch((error) => {
     logger.error(error);
@@ -713,6 +782,7 @@ function getTweetInSingleRoom(user_id: String, room_id: number) {
  */
 function getTweetInEachRoom(user_id: String) {
   console.log("get tweet in each room.")
+  const pool = new Pool(pool_data);
   const sql = `
   SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
   JOIN (
@@ -757,6 +827,7 @@ function getTweetInEachRoom(user_id: String) {
       }
       return tmp;
     });
+    pool.end().then(() => console.log('pool has ended'));
     return tweets;
   }).catch((error) => {
     logger.error(error);
@@ -766,6 +837,7 @@ function getTweetInEachRoom(user_id: String) {
 
 function getPicTweetInSingleRoom(user_id: String, room_id: number) {
   console.log("get pic-tweet in single-room.")
+  const pool = new Pool(pool_data);
   const sql = `SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
   JOIN (
       SELECT user_table.id,user_table.name,picture_table.path FROM user_table
@@ -801,6 +873,7 @@ function getPicTweetInSingleRoom(user_id: String, room_id: number) {
   return pool.query(sql, [user_id, room_id])
   .then(async (response) => {
     var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture), user_icon: getImage(row.user_icon) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: tweets };
   }).catch((error2) => {
     logger.error(error2);
@@ -816,6 +889,7 @@ function getPicTweetInSingleRoom(user_id: String, room_id: number) {
  */
 function getPicTweetInEachRoom(user_id: String) {
   console.log("get pic-tweet in each room.")
+  const pool = new Pool(pool_data);
   const sql = `
   SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
   JOIN (
@@ -855,6 +929,7 @@ function getPicTweetInEachRoom(user_id: String) {
   return pool.query(sql, [user_id, user_id])
   .then(async (response) => {
     var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return tweets;
   }).catch((error2) => {
     logger.error(error2);
@@ -869,6 +944,7 @@ function getPicTweetInEachRoom(user_id: String) {
  */
 function getInitialRoom(user_id: String) {
   console.log("get initial room")
+  const pool = new Pool(pool_data);
   const sql = `
     SELECT A.*, B.*, C.path AS picture from chatroom AS A
     LEFT JOIN user_chatroom_unit AS B ON B.chatroom_id = A.id
@@ -878,6 +954,7 @@ function getInitialRoom(user_id: String) {
   return pool.query(sql, [user_id])
   .then(async (response) => {
     var rooms = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: rooms };
     // return rooms;
   })
@@ -894,6 +971,7 @@ function getInitialRoom(user_id: String) {
  */
 function getRoomsUserBelong(user_id: String) {
   console.log("get rooms user belong")
+  const pool = new Pool(pool_data);
   const sql = `
   SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
@@ -904,6 +982,7 @@ function getRoomsUserBelong(user_id: String) {
   return pool.query(sql, [user_id])
   .then((response) => {
     var rooms = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return rooms;
   })
   .catch((error) => {
@@ -915,6 +994,7 @@ function getRoomsUserBelong(user_id: String) {
 
 function getMemberInRoom(room_id: number) {
   console.log("get member in room.")
+  const pool = new Pool(pool_data);
   const sql = `SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority, B.opening AS opening, B.posting AS posting FROM user_table
   JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
@@ -922,6 +1002,7 @@ function getMemberInRoom(room_id: number) {
   return pool.query(sql, [room_id])
   .then((response) => {
     var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return { status: true, data: users };
   })
   .catch((error) => {
@@ -937,6 +1018,7 @@ function getMemberInRoom(room_id: number) {
  */
 function getMemberInEachRoom(user_id: String) {
   console.log("get member in each room.")
+  const pool = new Pool(pool_data);
   const sql = `
     SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
     JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
@@ -951,6 +1033,7 @@ function getMemberInEachRoom(user_id: String) {
   return pool.query(sql, [user_id])
   .then((response) => {
     var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
     return users;
   })
   .catch((error) => {

@@ -59,7 +59,7 @@ const port = 8528; //8528, 8000
 const server = http.createServer(app).listen(port, host, () => {
   console.log('server start. port=' + port);
 });
-const io = require('socket.io')(server, {pingTimeout: 180000, pingInterval: 5000});// {pingTimeout: 10000, pingInterval: 30000}
+const io = require('socket.io')(server, {pingTimeout: 600000, pingInterval: 5000});// {pingTimeout: 10000, pingInterval: 30000}
 
 // PostgreSQL
 const { Pool } = require('pg');
@@ -77,7 +77,6 @@ const pool_data = {
   password: 'password',
   port: 5432 //15432
 }
-const pool = new Pool(pool_data)
 
 // Picture Directory
 // const picture_directory = '/tmp_images'
@@ -116,7 +115,7 @@ io.on('connection', socket => {
             break
         }
       }
-      
+      tmp_pool.end().then(() => console.log("poolを解除しました。"));
     })
     .catch(err => {
       logger.error(err)
