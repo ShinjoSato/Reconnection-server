@@ -45,7 +45,7 @@ import { configure, getLogger } from "log4js";
 configure({
   appenders: {
     out: { type: 'stdout' },
-    app: { type: 'file', filename: './logs/disconnected', pattern: "yyyy-MM-dd.log", keepFileExt: false, alwaysIncludePattern: true, daysToKeep: 10, maxLogSize: 1000000 }
+    app: { type: 'dateFile', filename: './logs/disconnected', pattern: "yyyy-MM-dd.log", keepFileExt: false, alwaysIncludePattern: true, daysToKeep: 10, compress: true, numBackups: 1 }
   },
   categories: {
     default: { appenders: ['out', 'app'], level: 'info' }
