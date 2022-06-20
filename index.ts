@@ -20,7 +20,8 @@ import {
   removeUserFromRoom,
   getRoomStatus,
   getRoomStatusForUser,
-  deleteRoom, 
+  deleteRoom,
+  selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
   selectUsersFriends,
@@ -274,6 +275,11 @@ io.on('connection', socket => {
     callback(await deleteRoom(data.room_id));
   });
 
+  socket.on('select-user-by-publicity', (data, callback) => {
+    console.log('select user by publicity.');
+    selectUsersByPublicity(data.publicity, callback);
+  });
+
   socket.on('select-all-user', (data, callback) => {
     console.log('select all user.');
     selectAllUser(callback);
@@ -289,7 +295,7 @@ io.on('connection', socket => {
 
   socket.on('update-user', async (data, callback) => {
     logger.info(`socket.on:${ "update-user" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);
-    const result = await checkAndUpdateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority);
+    const result = await checkAndUpdateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority, data.publicity);
     callback(result);
   });
 

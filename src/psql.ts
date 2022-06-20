@@ -158,8 +158,8 @@ function getTweetCount(tweet_id: String) {
 function insertIntoUser(id: String, name: String, pass: String, image_id: String, mail: String, authority: Boolean) {
   console.log("insert into user.")
   const pool = new Pool(pool_data);
-  const sql = "insert into user_table(id,name,password,image,mail,authority) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6) returning *;";
-  return pool.query(sql, [id, name, pass, image_id, mail, authority])
+  const sql = "insert into user_table(id,name,password,image,mail,authority,publicity) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6,$7) returning *;";
+  return pool.query(sql, [id, name, pass, image_id, mail, authority, 1])
   .then(async (response) => {
     pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };  
@@ -504,10 +504,26 @@ async function deleteRoom(room_id: number){
   // pictureも消さなければいけないかも
 }
 
+function selectUsersByPublicity(publicity: number, callback: Function){
+  console.log("select users by publicity.")
+  const pool = new Pool(pool_data);
+  const sql = "SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity FROM user_table AS A, picture_table AS B WHERE A.image=B.id AND A.publicity = $1;";
+  pool.query(sql, [publicity])
+  .then((res) => {
+    var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
+    callback({data: rows});
+  })
+  .catch((err) => {
+    logger.error(err);
+    callback({message: "取得に失敗しました。"});
+  })
+}
+
 function selectAllUser(callback: Function){
   console.log("select all user.")
   const pool = new Pool(pool_data);
-  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
+  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity FROM user_table AS A, picture_table AS B WHERE A.image=B.id;")
   .then((res) => {
     var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
     pool.end().then(() => console.log('pool has ended'));
@@ -523,7 +539,7 @@ function selectUsersInRoom(room_id: string){
   console.log("select users in room.")
   const pool = new Pool(pool_data);
   return pool.query(`
-  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
+  SELECT user_table.id AS user_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
   JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
   WHERE user_chatroom_unit.chatroom_id = $1;
@@ -542,7 +558,7 @@ function selectUsersInRoom(room_id: string){
 function selectUsersFriends(user_id: string) {
   console.log("select users friends.");
   const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
+  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
   FROM user_table AS A
   JOIN picture_table AS B ON B.id = A.image
   JOIN (
@@ -566,7 +582,7 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
   console.log("select friend not in room.")
   const pool = new Pool(pool_data);
   const sql = `
-  SELECT user_table.id AS user_id, user_table.name AS user_name, picture_table.path AS picture FROM user_table
+  SELECT user_table.id AS user_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture FROM user_table
   JOIN picture_table ON user_table.image = picture_table.id
   JOIN user_friend_unit AS C ON C.friend_id = user_table.id
   WHERE user_table.id NOT IN (
@@ -590,7 +606,7 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
 function getUserProfile(user_id: string) {
   console.log("get user-profile.")
   const pool = new Pool(pool_data);
-  const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1;";
+  const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, A.publicity, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1;";
   return pool.query(sql, [user_id]).then(async (response) => {
     pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
@@ -603,7 +619,7 @@ function getUserProfile(user_id: string) {
 function getUserProfileWithPass(user_id: string, password: string) {
   console.log("get user-profile with pass.")
   const pool = new Pool(pool_data);
-  const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1 AND pgp_sym_decrypt(A.password, 'password') = $2;";
+  const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, A.publicity AS publicity, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1 AND pgp_sym_decrypt(A.password, 'password') = $2;";
   return pool.query(sql, [user_id, password]).then(async (response) => {
     pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
@@ -613,11 +629,11 @@ function getUserProfileWithPass(user_id: string, password: string) {
   })
 }
 
-function updateUser(id: string, name: string, mail: string, authority: boolean) {
+function updateUser(id: string, name: string, mail: string, authority: boolean, publicity: number) {
   console.log("update user.");
   const pool = new Pool(pool_data);
-  const sql = "UPDATE user_table SET (name,mail,authority) = ($1,$2,$3) WHERE id = $4 RETURNING *;";
-  return pool.query(sql, [name, mail, authority, id]).then(async (response) => {
+  const sql = "UPDATE user_table SET (name,mail,authority,publicity) = ($1,$2,$3,$4) WHERE id = $5 RETURNING *;";
+  return pool.query(sql, [name, mail, authority, publicity, id]).then(async (response) => {
     pool.end().then(() => console.log('pool has ended'));
     return await { data: response, status: true };
   }).catch((error) => {
@@ -642,7 +658,7 @@ function selectUserWithPass(id: string, password: string) {
 function selectUserWithId(keyword: string) {
   console.log("select user with id.")
   const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority
+  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
   FROM user_table AS A
   JOIN picture_table AS B ON B.id = A.image
   WHERE A.id like $1;`;
@@ -656,14 +672,14 @@ function selectUserWithId(keyword: string) {
   })
 }
 
-async function checkAndUpdateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean){
+async function checkAndUpdateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, publicity: number){
   console.log("check and update user");
   const select = await selectUserWithPass(id, password);
   if(!select.status)
     return select;
   if(select.data.rows.length !== 1)
     return { message: "一致するユーザーがいません。", status: false };
-  const update = await updateUser(id, name, mail, authority);
+  const update = await updateUser(id, name, mail, authority, publicity);
   if(!update.status)
     return update;
   const profile = await getUserProfile(id);
@@ -995,7 +1011,7 @@ function getRoomsUserBelong(user_id: String) {
 function getMemberInRoom(room_id: number) {
   console.log("get member in room.")
   const pool = new Pool(pool_data);
-  const sql = `SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, picture_table.path AS picture, B.authority AS authority, B.opening AS opening, B.posting AS posting FROM user_table
+  const sql = `SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, B.authority AS authority, B.opening AS opening, B.posting AS posting FROM user_table
   JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
   JOIN picture_table ON picture_table.id = user_table.image
   WHERE B.chatroom_id = $1;`;
@@ -1020,7 +1036,7 @@ function getMemberInEachRoom(user_id: String) {
   console.log("get member in each room.")
   const pool = new Pool(pool_data);
   const sql = `
-    SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
+    SELECT user_table.id AS user_id, D.room_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
     JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
     JOIN picture_table ON picture_table.id = user_table.image
     JOIN (
@@ -1058,6 +1074,7 @@ export {
   getRoomStatus,
   getRoomStatusForUser,
   deleteRoom,
+  selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
   selectUsersFriends,

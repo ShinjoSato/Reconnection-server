@@ -17,6 +17,7 @@ create table user_table(
     image       integer not null references picture_table(id),
     mail        text not null,
     authority   boolean not null DEFAULT TRUE,
+    publicity   integer not null DEFAULT 1, -- 1: 一般ユーザー(ID検索で完全一致させて追加)), 2: 公式アカウント(検索しやすく自由に追加), 3: 必須アカウント(アカウント作成時にフレンド追加)
     primary key(id)
 );
 
@@ -92,7 +93,7 @@ INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES(1,'アドミン',1, 1
 INSERT INTO user_chatroom_unit(user_id, chatroom_id) VALUES('admin',1) RETURNING *; -- 必須！
 
 -- ユーザー取得
-select user_table.id,user_table.name,picture_table.path from user_table 
+select user_table.id,user_table.name,user_table.publicity,picture_table.path from user_table 
 join picture_table on user_table.image = picture_table.id;
 -- ルーム取得
 select chatroom.id,chatroom.name,picture_table.path,user_chatroom_unit.user_id from chatroom
@@ -170,3 +171,4 @@ alter table user_chatroom_unit add column authority boolean not null DEFAULT TRU
 alter table user_chatroom_unit add column opening boolean not null DEFAULT TRUE;
 alter table user_chatroom_unit add column posting boolean not null DEFAULT TRUE;
 alter table tweet add column head integer DEFAULT null;
+alter table user_table add column publicity integer not null DEFAULT 1;
