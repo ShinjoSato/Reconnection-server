@@ -267,7 +267,7 @@ function deleteFromUserRoomUnitByUserm(user_id: String) {
 function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_name: string, user_id: string, open_level: number, post_level: number){
   console.log("create user-room.")
   const pool = new Pool(pool_data);
-  return pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel) VALUES($1,$2,$3,$4) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level])
+  return pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel,start,latest) VALUES($1,$2,$3,$4,$5,$6) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level, 'now()', 'now()'])
   .then(async re=>{
     const insertRoom = re.rows.map(x => { return { ...x }; });
     const userRoomUnit = await insertIntoUserRoomUnit(user_id, re.rows[0].id, true, true, true);
@@ -418,7 +418,7 @@ function deleteFromRoom(room_id: number) {
 function selectAllRoom(callback: Function){
   console.log("select all room.");
   const pool = new Pool(pool_data);
-  pool.query("SELECT A.id AS id, A.name AS name, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id;")
+  pool.query("SELECT A.id AS id, A.name AS name, A.latest AS latest, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id;")
   .then((res) => {
     var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
     pool.end().then(() => console.log('pool has ended'));
@@ -455,10 +455,27 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
   })
 }
 
+function updateRoomlatest(id: string){
+  console.log("update room latest");
+  const pool = new Pool(pool_data);
+  return pool.query("UPDATE chatroom SET latest = (SELECT now()) WHERE (id) = ($1) RETURNING *;", [id]).then(async (res) => {
+    pool.end().then(() => console.log('pool has ended'));
+    if(res.rows.length==1){
+      return {message: 'update room latest success!', status: true };
+    }else{
+      return {message: "error update room latest", status: false};
+    }
+  })
+  .catch((err) => {
+    logger.error(err);
+    return {message: "cannnot update room latest", status: false};
+  })
+}
+
 function getRoomStatus(id: number) {
   console.log("get room status.")
   const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, B.path AS picture_path, B.path AS picture FROM chatroom AS A
+  const sql = `SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, A.latest AS latest, B.path AS picture_path, B.path AS picture FROM chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
   WHERE A.id = $1;`;
   return pool.query(sql, [id]).then(async (response) => {
@@ -474,7 +491,7 @@ function getRoomStatus(id: number) {
 function getRoomStatusForUser(room_id: number, user_id: string) {
   console.log("get room status for user.");
   const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture_path, B.path AS picture from chatroom AS A
+  const sql = `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, A.latest AS latest, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture_path, B.path AS picture from chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
   JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
   WHERE A.id = $1
@@ -989,7 +1006,7 @@ function getRoomsUserBelong(user_id: String) {
   console.log("get rooms user belong")
   const pool = new Pool(pool_data);
   const sql = `
-  SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
+  SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, A.latest AS latest, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
   JOIN picture_table AS B ON A.icon = B.id
   JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
   WHERE C.user_id = $1
@@ -1085,6 +1102,7 @@ export {
   deleteUser,
   selectAllRoom,
   updateRoom,
+  updateRoomlatest,
   getSingleRoom,
   getTweetInSingleRoom,
   getTweetInEachRoom,

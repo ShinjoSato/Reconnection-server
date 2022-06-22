@@ -32,6 +32,7 @@ import {
   deleteUser,
   selectAllRoom,
   updateRoom,
+  updateRoomlatest,
   getSingleRoom,
   getTweetInSingleRoom,
   getTweetInEachRoom,
@@ -133,6 +134,7 @@ io.on('connection', socket => {
       fs.writeFile(path, setImage(data.picture), 'base64', async function(err) {
         const pict = await insertIntoPicture('練習用のラベル', path);
         const insert = await insertIntoPicTweet(data.text, data.room, data.user, pict.data.rows[0].id, data.head);
+        await updateRoomlatest(data.room);
         const result = await getSingleTweet(insert.data.rows[0].id);
         if(result.status && CHATROOMS.includes(data.room)){
           console.log('通知を送る test2')
@@ -142,6 +144,7 @@ io.on('connection', socket => {
       })
     }else{// Without pictures
       const insert = await insertIntoTweet(data.text, data.room, data.user, data.head);
+      await updateRoomlatest(data.room);
       const result = await getSingleTweet(insert.data.rows[0].id);
       if(result.status && CHATROOMS.includes(data.room)){
         console.log('通知を送る')

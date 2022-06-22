@@ -27,6 +27,8 @@ create table chatroom (
     name    varchar(32) not null,
     openLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定公開, 3: 全体公開
     postLevel integer not null DEFAULT 3, -- 1: 自分のみ, 2: 限定投稿, 3: 全体投稿
+    start   timestamp not null DEFAULT now(), -- 部屋が作成された時
+    latest  timestamp not null DEFAULT now(), -- 部屋が作成された時, 呟かれた時
     -- letterNum integer not null DEFAULT 300, -- 300: 300文字以下, 500: 500文字以下, 0: 制限無し
     -- term    integer, -- 1: 1カ月以内, 6: 半年以内, 12: 一年以内, 0: 制限無し
     primary key(id)
@@ -172,3 +174,5 @@ alter table user_chatroom_unit add column opening boolean not null DEFAULT TRUE;
 alter table user_chatroom_unit add column posting boolean not null DEFAULT TRUE;
 alter table tweet add column head integer DEFAULT null;
 alter table user_table add column publicity integer not null DEFAULT 1;
+alter table chatroom add column start timestamp not null DEFAULT now();
+alter table chatroom add column latest timestamp not null DEFAULT now();
