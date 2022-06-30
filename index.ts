@@ -10,6 +10,7 @@ import {
   insertIntoTweet,
   insertIntoPicTweet,
   getSingleTweet,
+  getTweetInPublic,
   getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
@@ -31,6 +32,7 @@ import {
   checkAndUpdateUser,
   deleteUser,
   selectAllRoom,
+  selectCommonRoom,
   updateRoom,
   updateRoomlatest,
   getSingleRoom,
@@ -154,6 +156,10 @@ io.on('connection', socket => {
     }
   })
 
+  socket.on('get-tweet-in-public', async (data, callback) => {
+    callback(await getTweetInPublic(data.user_id));
+  })
+
   socket.on('first-login-room', async (data, callback) => {
     logger.info(`socket.on:${ "first-login-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id }`);
     const rooms = await getInitialRoom(data.id);
@@ -267,6 +273,11 @@ io.on('connection', socket => {
     console.log('select all room.');
     selectAllRoom(callback);
   });
+
+  socket.on('select-common-room', async (data, callback) => {
+    console.log('select common room.', data);
+    callback(await selectCommonRoom(data.user_id, data.another_id));
+  })
 
   socket.on('update-room', (data, callback) => {
     logger.info(`socket.on:${ "update-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);

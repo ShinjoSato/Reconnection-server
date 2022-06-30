@@ -129,6 +129,41 @@ function getSingleTweet(tweet_id: String) {
   })
 }
 
+function getTweetInPublic(user_id: String) {
+  console.log("get tweet in public.")
+  const pool = new Pool(pool_data);
+  const sql = `SELECT A.id, A.tweet, A.user_id, C.name, A.room_id, A.head, B.openLevel, C.path AS user_icon, D.path AS picture, A.time FROM tweet AS A
+  JOIN chatroom AS B ON A.room_id = B.id
+  JOIN (
+    select A.id, A.name, B.path from user_table AS A
+    JOIN picture_table AS B on B.id = A.image
+    where A.id = $1
+    or A.id in (
+      select friend_id from user_friend_unit
+      where user_id = $1
+    )
+  ) AS C ON C.id = A.user_id
+  LEFT OUTER JOIN picture_table AS D ON D.id = A.picture_id
+  WHERE B.openLevel = $2
+  ORDER BY A.time DESC
+  LIMIT $3 OFFSET $4;`;
+  return pool.query(sql, [user_id, '3', '20', '0']).then(async (response) => {
+    var tweet = (response.rows).map((row) => {
+      var tmp = { ...row, user_icon: getImage(row.user_icon) };
+      if(tmp.picture){
+        tmp.picture = getImage(tmp.picture);
+      }
+      return tmp;
+    });
+    pool.end().then(() => console.log('pool has ended'));
+    return { message: "サクセス", status: true, data: tweet };
+  })
+  .catch((error) => {
+    logger.error(error);
+    return {message: "エラー", status: false};
+  })
+}
+
 
 function getTweetCount(tweet_id: String) {
   console.log("get tweet-count.");
@@ -428,6 +463,30 @@ function selectAllRoom(callback: Function){
     logger.error(err);
     callback({message: "roomを取得できませんでした。"});
   });
+}
+
+function selectCommonRoom(user_id: string, another_id: string) {
+  console.log("get common room.")
+  const pool = new Pool(pool_data);
+  const sql = `SELECT A.id AS id, A.name AS NAME, A.openlevel AS open_level, A.postlevel AS post_level, A.latest AS latest, B.path AS picture FROM chatroom AS A
+  JOIN picture_table AS B ON A.icon = B.id
+  JOIN (
+    SELECT chatroom_id AS ID
+    FROM user_chatroom_unit
+    WHERE user_id = $1 OR user_id = $2
+    GROUP BY chatroom_id
+    HAVING COUNT(user_id) = 2
+  ) AS C ON C.id = A.id
+  ORDER BY A.id;
+  `;
+  return pool.query(sql, [user_id, another_id]).then(async (response) => {
+    const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
+    return { data: room, status: true };
+  }).catch((error) => {
+    logger.error(error);
+    return { message: "エラーが生じました。", status: false };
+  })
 }
 
 function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, user_id: string, callback: Function){
@@ -1080,6 +1139,7 @@ export {
   insertIntoTweet,
   insertIntoPicTweet,
   getSingleTweet,
+  getTweetInPublic,
   getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
@@ -1101,6 +1161,7 @@ export {
   checkAndUpdateUser,
   deleteUser,
   selectAllRoom,
+  selectCommonRoom,
   updateRoom,
   updateRoomlatest,
   getSingleRoom,
