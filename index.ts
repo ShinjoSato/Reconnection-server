@@ -11,6 +11,7 @@ import {
   insertIntoPicTweet,
   getSingleTweet,
   getTweetInPublic,
+  getTweetInPublicBefore,
   getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
@@ -158,6 +159,10 @@ io.on('connection', socket => {
 
   socket.on('get-tweet-in-public', async (data, callback) => {
     callback(await getTweetInPublic(data.user_id));
+  })
+
+  socket.on('get-tweet-in-public-before', async (data, callback) => {
+    callback(await getTweetInPublicBefore(data.user_id, data.head_tweet_id));
   })
 
   socket.on('first-login-room', async (data, callback) => {

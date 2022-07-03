@@ -164,6 +164,43 @@ function getTweetInPublic(user_id: String) {
   })
 }
 
+// getTweetInPublicのSQLと一行しか変わらないのでまとめたい！
+function getTweetInPublicBefore(user_id: String, head_tweet_id: String) {
+  console.log("get tweet in public before.")
+  const pool = new Pool(pool_data);
+  const sql = `SELECT A.id, A.tweet, A.user_id, C.name, A.room_id, A.head, B.openLevel, C.path AS user_icon, D.path AS picture, A.time FROM tweet AS A
+  JOIN chatroom AS B ON A.room_id = B.id
+  JOIN (
+    select A.id, A.name, B.path from user_table AS A
+    JOIN picture_table AS B on B.id = A.image
+    where A.id = $1
+    or A.id in (
+      select friend_id from user_friend_unit
+      where user_id = $1
+    )
+  ) AS C ON C.id = A.user_id
+  LEFT OUTER JOIN picture_table AS D ON D.id = A.picture_id
+  WHERE B.openLevel = $2
+  AND A.id < $3
+  ORDER BY A.time DESC
+  LIMIT $4 OFFSET $5;`;
+  return pool.query(sql, [user_id, '3', head_tweet_id, '20', '0']).then(async (response) => {
+    var tweet = (response.rows).map((row) => {
+      var tmp = { ...row, user_icon: getImage(row.user_icon) };
+      if(tmp.picture){
+        tmp.picture = getImage(tmp.picture);
+      }
+      return tmp;
+    });
+    pool.end().then(() => console.log('pool has ended'));
+    return { message: "サクセス", status: true, data: tweet };
+  })
+  .catch((error) => {
+    logger.error(error);
+    return {message: "エラー", status: false};
+  })
+}
+
 
 function getTweetCount(tweet_id: String) {
   console.log("get tweet-count.");
@@ -1140,6 +1177,7 @@ export {
   insertIntoPicTweet,
   getSingleTweet,
   getTweetInPublic,
+  getTweetInPublicBefore,
   getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
