@@ -3,6 +3,7 @@ node_modules
 images/*
 docs/*
 logs/*
+tmp/*
 
 # File
 Memo.md

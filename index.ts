@@ -109,14 +109,15 @@ io.on('connection', socket => {
         callback(profile);
       var user = (profile.data.rows).map(row => { return { ...row, image: getImage(row.image) }; })
       if(profile.data && 0 < profile.data.rows.length){
+        const title = fs.readFileSync('./docs/title.txt', 'utf-8');
+        const board = fs.readFileSync('./docs/board.txt', 'utf-8');
         switch(data.method){
           case 'login':
-            callback(user[0])
+            callback({ ...user[0], title, board })
             break
           case 'register':
             delete data.method
-            const board = fs.readFileSync('./docs/board.txt', 'utf-8');
-            callback({ ...data, board });
+            callback({ ...data, title, board });
             break
         }
       }
@@ -425,5 +426,7 @@ app.post("/sign-on/check", async function (request, response) {
   fs.writeFileSync(path, image, 'base64');
   const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
   logger.info(`result of /sign-on/check:${ result }`);
-  response.json(result);
+  const title = fs.readFileSync('./docs/title.txt', 'utf-8');
+  const board = fs.readFileSync('./docs/board.txt', 'utf-8');
+  response.json({ ...result, title, board });
 });
