@@ -487,6 +487,21 @@ function deleteFromRoom(room_id: number) {
   })
 }
 
+function selectRoom(room_id: number) {
+  console.log("select room.")
+  const pool = new Pool(pool_data);
+  return pool.query("SELECT A.id AS id, A.name AS name, A.openLevel AS openlevel, A.postLevel AS postlevel, A.latest AS latest, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND (A.id) = ($1);", [room_id])
+  .then(async (res) => {
+    var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
+    return { data: rows, status: true };
+  })
+  .catch((err) => {
+    logger.error(err);
+    return { status: false, message: "エラーが生じました。" };
+  });
+}
+
 function selectAllRoom(callback: Function){
   console.log("select all room.");
   const pool = new Pool(pool_data);
@@ -617,6 +632,26 @@ async function deleteRoom(room_id: number){
   // pictureも消さなければいけないかも
 }
 
+function selectUser(user_id: string){
+  console.log("select user.")
+  const pool = new Pool(pool_data);
+  return pool.query(`
+  SELECT user_table.id AS id, user_chatroom_unit.chatroom_id AS room_id, user_table.name AS name, user_table.mail AS mail, user_table.authority AS authority, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
+  JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+  JOIN picture_table ON picture_table.id = user_table.image
+  WHERE user_table.id = $1;
+  `, [user_id])
+  .then(async (response) => {
+    var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    pool.end().then(() => console.log('pool has ended'));
+    return { status: true, data: users };
+  })
+  .catch((error) => {
+    logger.error(error);
+    return { status: false, message: error.detail };
+  })
+}
+
 function selectUsersByPublicity(publicity: number, callback: Function){
   console.log("select users by publicity.")
   const pool = new Pool(pool_data);
@@ -679,6 +714,30 @@ function selectUsersFriends(user_id: string) {
     FROM user_friend_unit AS A
     WHERE A.user_id = $1
   ) AS C ON A.id = C.friend_id;`
+  return pool.query(sql, [user_id])
+  .then(async (response) => {
+    let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
+    return { status: true, data: friends };
+  })
+  .catch(error => {
+    logger.error(error);
+    return { status: false, message: error.detail };
+  })
+}
+
+// selectUsersFriendsとほぼ変わらないからまとめたい！
+function selectUsersFollowers(user_id: string) {
+  console.log("select users followers.");
+  const pool = new Pool(pool_data);
+  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
+  FROM user_table AS A
+  JOIN picture_table AS B ON B.id = A.image
+  JOIN (
+    SELECT *
+    FROM user_friend_unit AS A
+    WHERE A.friend_id = $1
+  ) AS C ON A.id = C.user_id;`
   return pool.query(sql, [user_id])
   .then(async (response) => {
     let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
@@ -1189,15 +1248,18 @@ export {
   getRoomStatus,
   getRoomStatusForUser,
   deleteRoom,
+  selectUser,
   selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
   selectUsersFriends,
+  selectUsersFollowers,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
   checkAndUpdateUser,
   deleteUser,
+  selectRoom,
   selectAllRoom,
   selectCommonRoom,
   updateRoom,

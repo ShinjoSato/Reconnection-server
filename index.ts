@@ -23,15 +23,18 @@ import {
   getRoomStatus,
   getRoomStatusForUser,
   deleteRoom,
+  selectUser,
   selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
   selectUsersFriends,
+  selectUsersFollowers,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
   checkAndUpdateUser,
   deleteUser,
+  selectRoom,
   selectAllRoom,
   selectCommonRoom,
   updateRoom,
@@ -143,6 +146,14 @@ io.on('connection', socket => {
         if(result.status && CHATROOMS.includes(data.room)){
           console.log('通知を送る test2')
           io.to(data.room).emit('receive-notification', result.data[0])
+          const room = await selectRoom(data.room);
+          if(room["data"][0]["openlevel"]===3){
+            const followers = await selectUsersFollowers(data.user);
+            io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
+            followers["data"].forEach((usr, idx) => {
+              io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
+            })
+          }
         }
         callback({ status: true, message: "chat with picture success!" });
       })
@@ -153,6 +164,14 @@ io.on('connection', socket => {
       if(result.status && CHATROOMS.includes(data.room)){
         console.log('通知を送る')
         io.to(data.room).emit('receive-notification', result.data[0])
+        const room = await selectRoom(data.room);
+        if(room["data"][0]["openlevel"]===3){
+          const followers = await selectUsersFollowers(data.user);
+          io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
+          followers["data"].forEach((usr, idx) => {
+            io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
+          })
+        }
       }
       callback({ status: true, message: "chat without picture success!" });
     }
@@ -247,7 +266,15 @@ io.on('connection', socket => {
 
   socket.on("add-user-into-room", async (data, callback) => {
     logger.info(`socket.on:${ "add-user-into-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
-    callback(await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io));
+    let result = await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io);
+    callback(result);
+    const roomMembers = await selectUsersInRoom(data.room_id);
+    const user = await selectUser(data.user_id);
+    roomMembers.data.forEach((member, index) => {
+      io.to(`@${member.user_id}`).emit('receive-signal', { ...user, signal: '002002', status: true, room_id: Number(data.room_id) });
+    })
+    const singleRoom = getSingleRoom(data.user_id, data.room_id);
+    io.to(`@${data.user_id}`).emit('receive-signal', { ...singleRoom, signal: '002000', status: true });//002000　を新たな部屋の取得にしたい
   })
 
   socket.on("update-user-in-room", async (data, callback) => {
@@ -273,6 +300,12 @@ io.on('connection', socket => {
       callback(result)
     const room = await getRoomStatusForUser(result.data.rows[0].chatroom_id, result.data.rows[0].user_id);
     callback(room);
+    const newRoom = await getSingleRoom(result.data.rows[0].user_id, result.data.rows[0].chatroom_id);
+    [data.userId].forEach((user_id, index) => {
+      io.to(`@${user_id}`).emit('receive-signal', { data: newRoom, signal: '002001', status: true });
+    })
+    CHATROOMS.push(result.data.rows[0].chatroom_id as string);
+    socket.join(result.data.rows[0].chatroom_id);
   });
 
   socket.on('select-all-room', (data, callback) => {
@@ -372,6 +405,10 @@ io.on('connection', socket => {
     logger.info(`socket.on:${ "connect-to-friend" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\tfriend_id:${ data.friend_id }`);
     const result = await insertIntoUserFriendUnit(data.user_id, data.friend_id);
     callback(result);
+    const friend = await selectUser(data.friend_id);
+    io.to(`@${data.user_id}`).emit('receive-signal', { data: friend, signal: '001001', status: true });
+    const user = await selectUser(data.user_id);
+    io.to(`@${data.friend_id}`).emit('receive-signal', { data: user, signal: '001001', status: true });
   })
 
   socket.on('notice-reading-tweet', async (data, callback) => {
