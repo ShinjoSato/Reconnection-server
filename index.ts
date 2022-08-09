@@ -273,8 +273,9 @@ io.on('connection', socket => {
     roomMembers.data.forEach((member, index) => {
       io.to(`@${member.user_id}`).emit('receive-signal', { ...user, signal: '002002', status: true, room_id: Number(data.room_id) });
     })
-    const singleRoom = getSingleRoom(data.user_id, data.room_id);
+    const singleRoom = await getSingleRoom(data.user_id, data.room_id);
     io.to(`@${data.user_id}`).emit('receive-signal', { ...singleRoom, signal: '002000', status: true });//002000　を新たな部屋の取得にしたい
+    // 上記のユーザーのserverでjoinさせたい！
   })
 
   socket.on("update-user-in-room", async (data, callback) => {
@@ -284,7 +285,19 @@ io.on('connection', socket => {
 
   socket.on("remove-user-from-room", async (data, callback) => {
     logger.info(`socket.on:${ "remove-user-from-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
-    callback(await removeUserFromRoom(data.user_id, data.room_id, io));
+    let result = await removeUserFromRoom(data.user_id, data.room_id, io)
+    callback(result);
+    if(result.status === true){
+      // ユーザー自身が部屋を退室
+      io.to(`@${data.user_id}`).emit('receive-signal', { data: {...result, user_id: data.user_id, room_id: data.room_id}, signal: '002999', status: true });
+      // ユーザーのserverでreaveをさせたい！
+
+      // 他のユーザーに退室を通達,部屋の更新
+      const roomMembers = await selectUsersInRoom(data.room_id);
+      roomMembers.data.forEach((member, index) => {
+        io.to(`@${member.user_id}`).emit('receive-signal', { data: {...result, user_id: data.user_id, room_id: data.room_id}, signal: '002997', status: true });
+      })
+    }
   })
 
   socket.on('create-room', async (data,callback) => {
@@ -350,6 +363,18 @@ io.on('connection', socket => {
     logger.info(`socket.on:${ "update-user" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);
     const result = await checkAndUpdateUser(data.id, data.name, data.picture, data.password, data.mail, data.authority, data.publicity);
     callback(result);
+
+    const user = await selectUser(data.id);
+    //フレンド情報の更新
+    const followers = await selectUsersFollowers(data.id);
+    followers['data'].concat(user.data[0]).forEach(follower => {
+      io.to(`@${follower.id}`).emit('receive-signal', { data: user.data[0], signal: '003001', status: true });
+    })
+    //ルーム内のユーザー情報の更新
+    const rooms = await getRoomsUserBelong(data.id);
+    user.data.forEach(user => {
+      io.to(user.room_id).emit('receive-signal', { data: user, signal: '003002', status: true });
+    })
   });
 
   socket.on('delete-user', async (data, callback) => {
@@ -424,9 +449,37 @@ io.on('connection', socket => {
 
   })
 
+  socket.on('notice-reading-tweet', async (data, callback) => {
+    const insert = await insertIntoUserTweetUnit(data.user_id, data.tweet_id);
+    if(!insert.status)
+      callback(insert)
+    const tweet = await getTweetCount(data.tweet_id);
+    if(!tweet.status)
+      callback(tweet);
+    const room_id = tweet.data.rows[0].room_id;
+    callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
+    io.to(room_id).emit('update-tweet-information', { data: tweet.data.rows[0] });
+  })
+
   function generateRandomString(length) {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
   }
+
+  socket.on('read-signal', async (data, callback) => {
+    const signal = data['signal'];
+    switch(signal) {
+      case 'A00001':
+        console.log("roomをjoinさせる", data['data']);
+        CHATROOMS.push(Number(data['data']['room_id']));
+        socket.join(Number(data['data']['room_id']));
+        break;
+      case 'A00002':
+        console.log("roomからleaveさせる", data['data']);
+        socket.leave(Number(data['data']['room_id']));
+        CHATROOMS = CHATROOMS.filter(x => x!==Number(data['data']['room_id']));
+        break;
+    }
+  })
 });
 
 function generateRandomString(length) {

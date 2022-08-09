@@ -237,7 +237,7 @@ function insertIntoUser(id: String, name: String, pass: String, image_id: String
     return await { data: response, status: true };  
   }).catch((error) => {
     logger.error(error);
-    return { message: "エラー", status: false };
+    return { message: error.detail, status: false };
   })
 }
 
@@ -776,7 +776,7 @@ function selectFriendNotInRoom(room_id: string, user_id: string) {
 }
 
 function getUserProfile(user_id: string) {
-  console.log("get user-profile.")
+  logger.info("get user-profile.");
   const pool = new Pool(pool_data);
   const sql = "SELECT A.id AS id, A.name AS name, A.mail AS mail, A.authority AS authority, A.publicity, B.path AS image FROM user_table AS A JOIN picture_table AS B ON B.id = A.image WHERE A.id = $1;";
   return pool.query(sql, [user_id]).then(async (response) => {
@@ -802,7 +802,7 @@ function getUserProfileWithPass(user_id: string, password: string) {
 }
 
 function updateUser(id: string, name: string, mail: string, authority: boolean, publicity: number) {
-  console.log("update user.");
+  logger.info("update user.");
   const pool = new Pool(pool_data);
   const sql = "UPDATE user_table SET (name,mail,authority,publicity) = ($1,$2,$3,$4) WHERE id = $5 RETURNING *;";
   return pool.query(sql, [name, mail, authority, publicity, id]).then(async (response) => {
@@ -815,7 +815,7 @@ function updateUser(id: string, name: string, mail: string, authority: boolean, 
 }
 
 function selectUserWithPass(id: string, password: string) {
-  console.log("select user with pass.")
+  logger.info("select user with pass.");
   const pool = new Pool(pool_data);
   const sql = "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;";
   return pool.query(sql, [id, password]).then(async (response) => {
@@ -845,7 +845,7 @@ function selectUserWithId(keyword: string) {
 }
 
 async function checkAndUpdateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, publicity: number){
-  console.log("check and update user");
+  console.log("check and update user", id, name, mail, authority, publicity);
   const select = await selectUserWithPass(id, password);
   if(!select.status)
     return select;
