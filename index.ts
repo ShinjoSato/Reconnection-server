@@ -91,10 +91,20 @@ const pool_data = {
 const picture_directory = 'images'
 
 let CHATROOMS = [];
+let UserID = '';
 
 io.on('connection', socket => {
   console.log('socket.id:' + socket.id);
   console.log('接続できました！')
+  console.log('この段階でのCHATROOMSの確認:')
+  console.log(CHATROOMS)
+
+  CHATROOMS.forEach(val => {
+    socket.join(val);
+  })
+  if (UserID.length > 0) {
+    socket.join(`@${UserID}`)
+  }
 
   // 切断時に発生します.
   socket.on('disconnect', reason => {
@@ -194,7 +204,8 @@ io.on('connection', socket => {
       CHATROOMS.push(val.chatroom_id);
       socket.join(val.chatroom_id);
     }
-    socket.join(`@${data.id}`);//@user id.
+    UserID = data.id
+    socket.join(`@${UserID}`);//@user id.
     callback({rows: rooms.data});
   })
 
