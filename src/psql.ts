@@ -21,83 +21,61 @@ const logger = getLogger();
 
 import { getImage, saveImage } from "./system";
 
-function insertIntoPicture(label: String, path: String) {
-  console.log("insert into picture.")
+// responseをそのままの形で返すパターン（insert,deleteはほとんどここに分類）
+function runGeneralSQL(sql: string, data: any[], message: object) {
   const pool = new Pool(pool_data);
-  const sql = `insert into picture_table(label,path) values($1,$2) returning *;`
-  return pool.query(sql, [label, path]).then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: response, status: true };
+  return pool.query(sql, data).then(async (response) => {
+    pool.end().then(() => 
+      console.log('pool has ended')
+    );
+    return { data: response, status: true, message: message['true'] };
   }).catch((error) => {
     logger.error(error);
-    return { message: "エラー", status: false };
+    return { status: false, message: error.detail };
   })
+}
+
+function insertIntoPicture(label: String, path: String) {
+  console.log("insert into picture.")
+  const sql = `insert into picture_table(label,path) values($1,$2) returning *;`
+  const message = { 'true': 'insert into pictureに成功しました。', 'false': 'insert into pictureに失敗しました。' }
+  return runGeneralSQL(sql, [label, path], message);
 }
 
 function deleteFromPicture(id: String) {
   console.log("delete from picture.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM picture_table WHERE id = $1;";
-  return pool.query(sql, [id]).then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: response, status: true };
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラー", status: false };
-  })
+  const message = { 'true': 'delete from pictureに成功しました。', 'false': 'delete from pictureに失敗しました。' }
+  return runGeneralSQL(sql, [id], message);
 }
 
 function insertIntoTweet(text: String, room_id: String, user_id: String, head: String) {
   console.log("insert into tweet.")
-  const pool = new Pool(pool_data);
   const sql = `insert into tweet(tweet,room_id,user_id,head) values($1,$2,$3,$4) RETURNING *;`
-  return pool.query(sql, [text, room_id, user_id, head]).then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: response, status: true };
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラー", status: false };
-  })
+  const message = { 'true': 'insert into tweetに成功しました。', 'false': 'insert into tweetに失敗しました。' }
+  return runGeneralSQL(sql, [text, room_id, user_id, head], message);
 }
 
 function deleteFromTweetInRoom(room_id: number) {
   console.log("delete from tweet in room.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM tweet WHERE room_id=$1;";
-  return pool.query(sql, [room_id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from tweet in roomに成功しました。', 'false': 'delete from tweet in room に失敗しました。' }
+  return runGeneralSQL(sql, [room_id], message);
 }
 
 function deleteFromTweetByUser(user_id: String) {
   // これでは他のユーザーもいるルームの呟きも削除されてしまうので、「削除されましたユーザー」も作成しときたい。
   console.log("delete from tweet by user.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM tweet WHERE (user_id)=($1);";
-  return pool.query(sql, [user_id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from tweet by userに成功しました。', 'false': 'delete from tweet by userに失敗しました。' }
+  return runGeneralSQL(sql, [user_id], message);
 }
 
 function insertIntoPicTweet(text: String, room_id: String, user_id: String, picture_id: String, head: String) {
   console.log("insert into pic-tweet.")
-  const pool = new Pool(pool_data);
   const sql = `insert into tweet(tweet,room_id,user_id,picture_id,head) values($1,$2,$3,$4,$5) RETURNING *;`
-  return pool.query(sql, [text, room_id, user_id, picture_id, head]).then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: response, status: true };
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラー", status: false };
-  })
+  const message = { 'true': 'insert into pic-tweetに成功しました。', 'false': 'insert into pic-tweetに失敗しました。' }
+  return runGeneralSQL(sql, [text, room_id, user_id, picture_id, head], message);
 }
 
 function getSingleTweet(tweet_id: String) {
@@ -128,6 +106,36 @@ function getSingleTweet(tweet_id: String) {
     return {message: "エラー", status: false};
   })
 }
+
+function getCommonTweetsInRoom(room_id: number) {
+  // getSingleTweetとほとんど変わらないから共通化したい
+  console.log("get commom tweets in room.")
+  const pool = new Pool(pool_data);
+  const sql = `
+    select tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name as user, user_table.id as user_id, user_table.path as user_icon, picture_table.path as picture from tweet
+    join (
+        select user_table.id,user_table.name,picture_table.path from user_table
+        join picture_table on user_table.image = picture_table.id
+    ) as user_table on tweet.user_id = user_table.id
+    left join picture_table on tweet.picture_id = picture_table.id
+    where tweet.room_id = $1
+  `;
+  return pool.query(sql, [room_id]).then(async (response) => {
+    var tweet = (response.rows).map((row) => {
+      var tmp = { ...row, user_icon: getImage(row.user_icon) };
+      if(tmp.picture){
+        tmp.picture = getImage(tmp.picture);
+      }
+      return tmp;
+    });
+    pool.end().then(() => console.log('pool has ended'));
+    return { message: "サクセス", status: true, data: tweet };
+  })
+  .catch((error) => {
+    logger.error(error);
+    return {message: "エラー", status: false};
+  })
+} 
 
 function getTweetInPublic(user_id: String) {
   console.log("get tweet in public.")
@@ -204,7 +212,6 @@ function getTweetInPublicBefore(user_id: String, head_tweet_id: String) {
 
 function getTweetCount(tweet_id: String) {
   console.log("get tweet-count.");
-  const pool = new Pool(pool_data);
   const sql = `SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
   JOIN(-- 呟きに対する既読数
       SELECT tweet.id, COUNT(A.tweet_id)::int
@@ -216,116 +223,62 @@ function getTweetCount(tweet_id: String) {
       GROUP BY tweet.id
   ) AS A ON A.id = tweet.id
   WHERE tweet.id = $1;`
-  return pool.query(sql, [tweet_id])
-  .then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: response };
-  })
-  .catch(error => {
-    logger.error(error);
-    return { status: false, message: error.detail };
-  })
+  const pool = new Pool(pool_data);
+  const message = { 'true': 'get tweet countに成功しました。', 'false': 'get tweet countに失敗しました。' }
+  return runGeneralSQL(sql, [tweet_id], message);
 }
 
 function insertIntoUser(id: String, name: String, pass: String, image_id: String, mail: String, authority: Boolean) {
   console.log("insert into user.")
-  const pool = new Pool(pool_data);
   const sql = "insert into user_table(id,name,password,image,mail,authority,publicity) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6,$7) returning *;";
-  return pool.query(sql, [id, name, pass, image_id, mail, authority, 1])
-  .then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { data: response, status: true };  
-  }).catch((error) => {
-    logger.error(error);
-    return { message: error.detail, status: false };
-  })
+  const message = { 'true': 'insert into userに成功しました。', 'false': 'insert into userに失敗しました。' }
+  return runGeneralSQL(sql, [id, name, pass, image_id, mail, authority, 1], message);
 }
 
 
 function deleteFromUser(id: String) {
   console.log("delete from user.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_table WHERE id=$1 RETURNING *;";
-  return pool.query(sql, [id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from userに成功しました。', 'false': 'delete from userに失敗しました。' }
+  return runGeneralSQL(sql, [id], message);
 }
 
 function insertIntoUserTweetUnit(user_id: string, tweet_id: number) {
   console.log("insert into user tweet unit.");
-  const pool = new Pool(pool_data);
   const sql = `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);`
-  return pool.query(sql, [user_id, tweet_id])
-  .then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { message: '追加しました。', status: true };
-  })
-  .catch((error) => {
-    logger.error(error);
-    return { message: error.message, status: false };
-  })
+  const message = { 'true': 'insert into user tweet unitに成功しました。', 'false': 'insert into user tweet unitに失敗しました。' }
+  return runGeneralSQL(sql, [user_id, tweet_id], message);
 }
 
 function insertIntoUserFriendUnit(user_id: string, friend_id: string) {
   console.log("insert into user friend unit.");
-  const pool = new Pool(pool_data);
   const sql = `INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`
-  return pool.query(sql, [user_id, friend_id])
-  .then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { message: '追加しました。', status: true };
-  })
-  .catch((error) => {
-    logger.error(error);
-    return { message: error.message, status: false };
-  })
+  const message = { 'true': 'insert into user friend unitに成功しました。', 'false': 'insert into user friend unitに失敗しました。' }
+  return runGeneralSQL(sql, [user_id, friend_id], message);
 }
 
 
 function insertIntoUserRoomUnit(user_id: string, room_id: number, authority: boolean, opening: boolean, posting: boolean) {
   console.log("insert into user-room unit.")
-  const pool = new Pool(pool_data);
-  return pool.query("INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;",[user_id, room_id, authority, opening, posting])
-  .then(async response => {
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: response, status: true };
-  })
-  .catch(err=>{
-    logger.error(err);
-    return { status: false, message: "エラーが発生しました。" };
-  })
+  const sql = "INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;"
+  const message = { 'true': 'insert into user-room unitに成功しました。', 'false': 'insert into user-room unitに失敗しました。' }
+  return runGeneralSQL(sql, [user_id, room_id, authority, opening, posting], message);
 }
 
 
 function deleteFromUserRoomUnitByRoom(room_id: number) {
   console.log("delete from user-room unit by room.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;";
-  return pool.query(sql, [room_id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from user-room unit by roomに成功しました。', 'false': 'delete from user-room unit by roomに失敗しました。' }
+  return runGeneralSQL(sql, [room_id], message);
 }
 
 
 function deleteFromUserRoomUnitByUserm(user_id: String) {
   console.log("delete from user-room unit by user.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM user_chatroom_unit WHERE (user_id)=($1);";
-  return pool.query(sql, [user_id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from user-room unit by userに成功しました。', 'false': 'delete from user-room unit by userに失敗しました。' }
+  return runGeneralSQL(sql, [user_id], message);
 }
 
 
@@ -476,15 +429,9 @@ async function addUserWithPicture(user_id: string, user_name: string, user_passw
 
 function deleteFromRoom(room_id: number) {
   console.log("delete from room.")
-  const pool = new Pool(pool_data);
   const sql = "DELETE FROM chatroom WHERE (id)=($1);";
-  return pool.query(sql, [room_id]).then(async (res) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { status: true, message: "削除に成功しました。" };
-  }).catch((error) => {
-    logger.error(error);
-    return { status: false, message: "削除に失敗しました。" };
-  })
+  const message = { 'true': 'delete from roomに成功しました。', 'false': 'delete from roomに失敗しました。' }
+  return runGeneralSQL(sql, [room_id], message);
 }
 
 function selectRoom(room_id: number) {
@@ -535,6 +482,20 @@ function selectCommonRoom(user_id: string, another_id: string) {
     const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
     pool.end().then(() => console.log('pool has ended'));
     return { data: room, status: true };
+  }).catch((error) => {
+    logger.error(error);
+    return { message: "エラーが生じました。", status: false };
+  })
+}
+
+function selectRoomPublication(id: string) {
+  console.log("select room publication.")
+  const pool = new Pool(pool_data);
+  const sql = `SELECT room_id FROM chatroom_publication WHERE id = $1;`;
+  return pool.query(sql, [id]).then(async (response) => {
+    // const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
+    pool.end().then(() => console.log('pool has ended'));
+    return { data: response.rows, status: true };
   }).catch((error) => {
     logger.error(error);
     return { message: "エラーが生じました。", status: false };
@@ -816,15 +777,9 @@ function updateUser(id: string, name: string, mail: string, authority: boolean, 
 
 function selectUserWithPass(id: string, password: string) {
   logger.info("select user with pass.");
-  const pool = new Pool(pool_data);
   const sql = "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;";
-  return pool.query(sql, [id, password]).then(async (response) => {
-    pool.end().then(() => console.log('pool has ended'));
-    return await { data: response, status: true };
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラーが発生しました。", status: false };
-  })
+  const message = { 'true': 'select user with passに成功しました。', 'false': 'select user with passに失敗しました。' }
+  return runGeneralSQL(sql, [id, password], message)
 }
 
 function selectUserWithId(keyword: string) {
@@ -1235,6 +1190,7 @@ export {
   insertIntoTweet,
   insertIntoPicTweet,
   getSingleTweet,
+  getCommonTweetsInRoom,
   getTweetInPublic,
   getTweetInPublicBefore,
   getTweetCount,
@@ -1262,6 +1218,7 @@ export {
   selectRoom,
   selectAllRoom,
   selectCommonRoom,
+  selectRoomPublication,
   updateRoom,
   updateRoomlatest,
   getSingleRoom,

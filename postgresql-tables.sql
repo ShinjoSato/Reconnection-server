@@ -69,6 +69,15 @@ create table user_tweet_unit (-- 既読履歴
     primary key(user_id, tweet_id)
 );
 
+create table chatroom_publication (-- API実行。hatroomのopenLevel=3のみ登録可能
+    id      varchar(16) not null,
+    room_id integer not null references chatroom(id),
+    PRIMARY KEY(id)
+);
+-- insert into chatroom_publication(id, room_id) values('qazwsxedcrfvtgby', 118);
+SELECT room_id FROM chatroom_publication
+WHERE id = 'qazwsxedcrfvtgby';
+
 -- サンプルデータ集
 insert into picture_table(label,path) values('ダミー画像','');
 insert into picture_table(label,path) values('default image','images/default.png'); -- 必須！

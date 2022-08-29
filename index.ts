@@ -10,6 +10,7 @@ import {
   insertIntoTweet,
   insertIntoPicTweet,
   getSingleTweet,
+  getCommonTweetsInRoom,
   getTweetInPublic,
   getTweetInPublicBefore,
   getTweetCount,
@@ -37,6 +38,7 @@ import {
   selectRoom,
   selectAllRoom,
   selectCommonRoom,
+  selectRoomPublication,
   updateRoom,
   updateRoomlatest,
   getSingleRoom,
@@ -530,4 +532,26 @@ app.post("/sign-on/check", async function (request, response) {
   const title = fs.readFileSync('./docs/title.txt', 'utf-8');
   const board = fs.readFileSync('./docs/board.txt', 'utf-8');
   response.json({ ...result, title, board });
+});
+
+/**
+ * API仕様
+ */
+app.get("/publication", async function (request, response) {
+  logger.info(`/publication,\trequest:${ request },\tresponse:${ response }`);
+  let data = {};
+  console.log("request.params.id:", request.query.id)
+  if(request.query.id) {
+    const room = await selectRoomPublication(request.query.id);
+    if(room["data"].length > 0) {
+      const tweets = await getCommonTweetsInRoom(room["data"][0]["room_id"]);
+      data = { ...tweets, }
+    } else {
+      data = {message: "No tweet or undefined id.", status: false};
+    }
+  } else {
+    data = {message: "No id.", status: false};
+  }
+  response.set({ 'Access-Control-Allow-Origin': '*' })
+  response.json(data);
 });
