@@ -1,9 +1,11 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
+const cors = require('cors')
 const app = express();
 const fs = require('fs')
 const {randomBytes} = require('crypto')
+const nodemailer = require('nodemailer');
 
 import {
   insertIntoPicture,
@@ -500,6 +502,7 @@ function generateRandomString(length) {
 }
 
 // expressで静的ページにアクセスする.
+app.use(cors())
 app.use(express.urlencoded({extended: true, limit: '10mb'}));
 app.use(express.static(path.join(__dirname, 'static')));
 app.use(express.json())
@@ -555,3 +558,41 @@ app.get("/publication", async function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' })
   response.json(data);
 });
+
+/**
+ * Mail送信
+ * 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
+ */
+ app.post("/mail", async function (request, response) {
+  response.set({ 'Access-Control-Allow-Origin': '*' });
+  logger.info(`/mail,\trequest:${ request },\tresponse:${ response }`);
+  logger.info('request:', request)
+  const { body } = request; // .mail .subject .text
+  if('mail' in body && 'subject' in body && 'text' in body) {
+    // 相手に送信完了メール
+    sendMail(body.mail, `From Shinjo Sato Website`, `以下のメッセージを送信しました\n件名:${body.subject}\n内容:${body.text}`)
+    // 特定のアドレスに通知メール
+    sendMail('nomi.shinjo@gmail.com', 'From website: '+body.subject, 'ウェブサイトから以下のメッセージを取得しました。\n↓\n'+body.text)
+  }
+  response.json({ test: '送信完了' });
+});
+
+
+async function sendMail(address: string, subject: string, text: string) {
+  logger.info('send e-mail to:\t', address, subject, text)
+  const { options } = require('./src/bin/mail')
+  const mail = {
+    from: 'shinjo.sample.blog@gmail.com',
+    to: address,
+    subject: subject,
+    text: text,
+    // html: `<p>${ text }</p>`,
+  };
+  try {
+    const transport = nodemailer.createTransport(options);
+    const result = await transport.sendMail(mail);
+    logger.mark(result);
+  } catch (err) {
+    logger.error(err);
+  }
+}

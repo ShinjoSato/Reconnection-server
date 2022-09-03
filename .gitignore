@@ -4,6 +4,7 @@ images/*
 docs/*
 logs/*
 tmp/*
+src/bin/*
 
 # File
 Memo.md
