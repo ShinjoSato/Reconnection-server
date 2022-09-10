@@ -1,12 +1,9 @@
 # Directories
-node_modules
-images/*
-docs/*
-logs/*
+app/images/*
+app/logs/*
+app/node_modules
+app/src/bin/*
 tmp/*
-src/bin/*
 
 # File
-Memo.md
 *.js
-yarn.lock

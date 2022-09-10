@@ -50,9 +50,9 @@ import {
   getInitialRoom,
   getRoomsUserBelong,
   getMemberInEachRoom,
-} from "./src/psql";
+} from "./psql";
 
-import { getImage, setImage, isExisted } from "./src/system";
+import { getImage, setImage, isExisted } from "./system";
 import { configure, getLogger } from "log4js";
 configure({
   appenders: {
@@ -126,8 +126,8 @@ io.on('connection', socket => {
         callback(profile);
       var user = (profile.data.rows).map(row => { return { ...row, image: getImage(row.image) }; })
       if(profile.data && 0 < profile.data.rows.length){
-        const title = fs.readFileSync('./docs/title.txt', 'utf-8');
-        const board = fs.readFileSync('./docs/board.txt', 'utf-8');
+        const title = fs.readFileSync('./bin/title.txt', 'utf-8');
+        const board = fs.readFileSync('./bin/board.txt', 'utf-8');
         switch(data.method){
           case 'login':
             callback({ ...user[0], title, board })
@@ -532,8 +532,8 @@ app.post("/sign-on/check", async function (request, response) {
   fs.writeFileSync(path, image, 'base64');
   const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
   logger.info(`result of /sign-on/check:${ result }`);
-  const title = fs.readFileSync('./docs/title.txt', 'utf-8');
-  const board = fs.readFileSync('./docs/board.txt', 'utf-8');
+  const title = fs.readFileSync('./bin/title.txt', 'utf-8');
+  const board = fs.readFileSync('./bin/board.txt', 'utf-8');
   response.json({ ...result, title, board });
 });
 
@@ -580,7 +580,7 @@ app.get("/publication", async function (request, response) {
 
 async function sendMail(address: string, subject: string, text: string) {
   logger.info('send e-mail to:\t', address, subject, text)
-  const { options } = require('./src/bin/mail')
+  const { options } = require('./bin/mail')
   const mail = {
     from: 'shinjo.sample.blog@gmail.com',
     to: address,
