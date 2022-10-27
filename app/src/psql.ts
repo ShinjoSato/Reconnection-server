@@ -158,6 +158,8 @@ function runGeneralSQL(sql: string, data: any[], message: object, toPicture: any
     return { rows: response.rows, status: true, message: message['true'] };
   }).catch((error) => {
     logger.error(error);
+    logger.error(sql)
+    logger.error(data)
     return { status: false, message: error.detail };
   })
 }

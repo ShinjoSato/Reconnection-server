@@ -46,6 +46,7 @@ import {
   getMemberInEachRoom,
 } from "./psql";
 
+import Response from "./Response";
 import { getImage, setImage, isExisted } from "./system";
 import { configure, getLogger } from "log4js";
 configure({
@@ -137,64 +138,6 @@ io.on('connection', socket => {
     .catch(err => {
       logger.error(err)
     })
-  })
-
-  socket.on('chat', async (data, callback) => {
-    logger.info(`socket.on:${ "chat" },\tkeys:${ Object.keys(data) },\ttext:${ data.text },\tuser:${ data.user },\troom:${ data.room }`);
-    if(data.picture){// With picture
-      var path = `${ picture_directory }/${generateRandomString(12)}.png`
-      while(isExisted(path)){
-        path = `${ picture_directory }/${generateRandomString(12)}.png`
-      }
-      // 画像の書き込み
-      fs.writeFile(path, setImage(data.picture), 'base64', async function(err) {
-        // 画像のデータ保存
-        const { rows : pict } = await runGeneralSQL(SQL['insert-into-picture'], [ '練習用のラベル', path ], Message['insert-into-picture'], null)
-        // 画像付きツイートの保存
-        const { rows : insert } = await runGeneralSQL(SQL['insert-tnto-pictweet'], [ data.text, data.room, data.user, pict[0].id, data.head ], Message['insert-tnto-pictweet'], null)
-        // 部屋の更新?
-        await updateRoomlatest(data.room);
-        // ツイートの取得
-        const result = await getSingleTweet(insert[0].id);
-        // ツイート成功 & 呟かれた部屋に所属する時
-        if(result.status && CHATROOMS.includes(data.room)){
-          console.log('通知を送る test2')
-          // 部屋に属する全ユーザーに通知を送る
-          io.to(data.room).emit('receive-notification', result.data[0])
-          const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
-          // 部屋が全体公開の設定の時
-          if(room[0]["openlevel"]===3){
-            // フォロワーの取得
-            const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
-            // 呟いた本人のタイムラインに送信
-            io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-            // フォロワー1人1人のタイムラインに送信
-            rows.forEach((usr, idx) => {
-              io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-            })
-          }
-        }
-        // 呟きの実行ステータスを送信
-        callback({ status: true, message: "chat with picture success!" });
-      })
-    }else{// Without pictures
-      const { rows:insert } = await runGeneralSQL(SQL['insert-into-tweet'], [ data.text, data.room, data.user, data.head ], Message['insert-into-tweet'], null)
-      await updateRoomlatest(data.room);
-      const result = await getSingleTweet(insert[0].id);
-      if(result.status && CHATROOMS.includes(data.room)){
-        console.log('通知を送る')
-        io.to(data.room).emit('receive-notification', result.data[0])
-        const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
-        if(room[0]["openlevel"]===3){
-          const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
-          io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-          rows.forEach((usr, idx) => {
-            io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
-          })
-        }
-      }
-      callback({ status: true, message: "chat without picture success!" });
-    }
   })
 
   socket.on('get-tweet-in-public', async (data, callback) => {
@@ -487,6 +430,7 @@ io.on('connection', socket => {
   }
 
   socket.on('read-signal', async (data, callback) => {
+    logger.info('read-signal');
     const signal = data['signal'];
     switch(signal) {
       case 'A00001':
@@ -499,9 +443,65 @@ io.on('connection', socket => {
         socket.leave(Number(data['data']['room_id']));
         CHATROOMS = CHATROOMS.filter(x => x!==Number(data['data']['room_id']));
         break;
+      case '/chat': // 呟く
+        logger.info(`/chat→socket.on:${ "chat" },\tkeys:${ Object.keys(data) },\ttext:${ data.text },\tuser:${ data.user },\troom:${ data.room }`);
+        const result = await chat(data.user, data.room, data.text, data.picture, data.head)
+        // 呟きを知らせる処理
+        if(result.status && CHATROOMS.includes(data.room)){
+          console.log('通知を送る')
+          io.to(data.room).emit('receive-notification', result.data[0])
+          const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
+          if(room[0]["openlevel"]===3){
+            const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
+            io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
+            rows.forEach((usr, idx) => {
+              io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
+            })
+          }
+        }
+        callback(new Response(result.status, [], "chat success"));
+        break;
     }
   })
 });
+
+/**
+ * 呟き処理。
+ * @param {string} user ユーザーID
+ * @param {string} room ルームID
+ * @param {string} text 呟き内容
+ * @param {any} picture 画像が含まれないときはnull
+ * @param {string} head 存在する場合はスレッド内の一つ前の呟きID
+ * @returns 呟きの結果を返す。
+ */
+async function chat(user:string, room:string, text:string, picture:any, head:string) {
+  var params = [] as any[]
+  var key = ''
+
+  if(picture != null){
+    // 画像を持つ時の処理
+    key = 'insert-tnto-pictweet'
+    var path = `${ picture_directory }/${generateRandomString(12)}.png`
+    while(isExisted(path)){
+      path = `${ picture_directory }/${generateRandomString(12)}.png`
+    }
+    // 画像のデータ保存
+    fs.writeFileSync(path, setImage(picture), 'base64')
+    const { rows : pict } = await runGeneralSQL(SQL['insert-into-picture'], [ '練習用のラベル', path ], Message['insert-into-picture'], null)
+    params = [ text, room, user, pict[0].id, head ]
+  }else{
+    // 画像を持たない時の処理
+    key = 'insert-into-tweet'
+    params = [ text, room, user, head ]
+  }
+  // 共通の処理
+  const { rows : insert } = await runGeneralSQL(SQL[key], params, Message[key], null)
+  // 部屋の更新?
+  await updateRoomlatest(room);
+  // ツイートの取得
+  const result = await getSingleTweet(insert[0].id);
+  return result
+}
 
 function generateRandomString(length) {
   return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '');

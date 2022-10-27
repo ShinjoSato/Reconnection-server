@@ -1,4 +1,5 @@
 # Directories
+app/bin/*
 app/images/*
 app/logs/*
 app/node_modules
