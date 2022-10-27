@@ -8,19 +8,16 @@ const {randomBytes} = require('crypto')
 const nodemailer = require('nodemailer');
 
 import {
-  insertIntoPicture,
-  insertIntoTweet,
-  insertIntoPicTweet,
+  SQL,
+  Message,
+  runGeneralSQL,
   getSingleTweet,
   getCommonTweetsInRoom,
   getTweetInPublic,
   getTweetInPublicBefore,
-  getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
   addUserWithPicture,
-  insertIntoUserTweetUnit,
-  insertIntoUserFriendUnit,
   createUserRoomWithPicture, 
   removeUserFromRoom,
   getRoomStatus,
@@ -30,14 +27,11 @@ import {
   selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
-  selectUsersFriends,
-  selectUsersFollowers,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
   checkAndUpdateUser,
   deleteUser,
-  selectRoom,
   selectAllRoom,
   selectCommonRoom,
   selectRoomPublication,
@@ -152,37 +146,49 @@ io.on('connection', socket => {
       while(isExisted(path)){
         path = `${ picture_directory }/${generateRandomString(12)}.png`
       }
+      // 画像の書き込み
       fs.writeFile(path, setImage(data.picture), 'base64', async function(err) {
-        const pict = await insertIntoPicture('練習用のラベル', path);
-        const insert = await insertIntoPicTweet(data.text, data.room, data.user, pict.data.rows[0].id, data.head);
+        // 画像のデータ保存
+        const { rows : pict } = await runGeneralSQL(SQL['insert-into-picture'], [ '練習用のラベル', path ], Message['insert-into-picture'], null)
+        // 画像付きツイートの保存
+        const { rows : insert } = await runGeneralSQL(SQL['insert-tnto-pictweet'], [ data.text, data.room, data.user, pict[0].id, data.head ], Message['insert-tnto-pictweet'], null)
+        // 部屋の更新?
         await updateRoomlatest(data.room);
-        const result = await getSingleTweet(insert.data.rows[0].id);
+        // ツイートの取得
+        const result = await getSingleTweet(insert[0].id);
+        // ツイート成功 & 呟かれた部屋に所属する時
         if(result.status && CHATROOMS.includes(data.room)){
           console.log('通知を送る test2')
+          // 部屋に属する全ユーザーに通知を送る
           io.to(data.room).emit('receive-notification', result.data[0])
-          const room = await selectRoom(data.room);
-          if(room["data"][0]["openlevel"]===3){
-            const followers = await selectUsersFollowers(data.user);
+          const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
+          // 部屋が全体公開の設定の時
+          if(room[0]["openlevel"]===3){
+            // フォロワーの取得
+            const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
+            // 呟いた本人のタイムラインに送信
             io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-            followers["data"].forEach((usr, idx) => {
+            // フォロワー1人1人のタイムラインに送信
+            rows.forEach((usr, idx) => {
               io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
             })
           }
         }
+        // 呟きの実行ステータスを送信
         callback({ status: true, message: "chat with picture success!" });
       })
     }else{// Without pictures
-      const insert = await insertIntoTweet(data.text, data.room, data.user, data.head);
+      const { rows:insert } = await runGeneralSQL(SQL['insert-into-tweet'], [ data.text, data.room, data.user, data.head ], Message['insert-into-tweet'], null)
       await updateRoomlatest(data.room);
-      const result = await getSingleTweet(insert.data.rows[0].id);
+      const result = await getSingleTweet(insert[0].id);
       if(result.status && CHATROOMS.includes(data.room)){
         console.log('通知を送る')
         io.to(data.room).emit('receive-notification', result.data[0])
-        const room = await selectRoom(data.room);
-        if(room["data"][0]["openlevel"]===3){
-          const followers = await selectUsersFollowers(data.user);
+        const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
+        if(room[0]["openlevel"]===3){
+          const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
           io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-          followers["data"].forEach((usr, idx) => {
+          rows.forEach((usr, idx) => {
             io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
           })
         }
@@ -381,8 +387,8 @@ io.on('connection', socket => {
 
     const user = await selectUser(data.id);
     //フレンド情報の更新
-    const followers = await selectUsersFollowers(data.id);
-    followers['data'].concat(user.data[0]).forEach(follower => {
+    const { rows : followers } = runGeneralSQL(SQL['select-users-followers'], [ data.id ], Message['select-users-followers'], 'picture')
+    followers.concat(user.data[0]).forEach(follower => {
       io.to(`@${follower.id}`).emit('receive-signal', { data: user.data[0], signal: '003001', status: true });
     })
     //ルーム内のユーザー情報の更新
@@ -428,10 +434,10 @@ io.on('connection', socket => {
   })
 
   socket.on('get-friend-list', async (data, callback) => {
-    const friends = await selectUsersFriends(data.user_id);
-    if(!friends.status)
-      return friends;
-    callback(friends.data);
+    const { rows, status, message } = await runGeneralSQL(SQL['select-users-friends'], [ data.id ], Message['select-users-friends'], 'picture')
+    if(!status)
+      return { rows, status, message };
+    callback(rows);
   })
 
   socket.on('search-user', async (data, callback) => {
@@ -443,7 +449,7 @@ io.on('connection', socket => {
 
   socket.on('connect-to-friend', async (data, callback) => {
     logger.info(`socket.on:${ "connect-to-friend" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\tfriend_id:${ data.friend_id }`);
-    const result = await insertIntoUserFriendUnit(data.user_id, data.friend_id);
+    const result = await runGeneralSQL(SQL['insert-into-user-friend-unit'], [ data.user_id, data.friend_id ], Message['insert-into-user-friend-unit'], null)
     callback(result);
     const friend = await selectUser(data.friend_id);
     io.to(`@${data.user_id}`).emit('receive-signal', { data: friend, signal: '001001', status: true });
@@ -452,28 +458,28 @@ io.on('connection', socket => {
   })
 
   socket.on('notice-reading-tweet', async (data, callback) => {
-    const insert = await insertIntoUserTweetUnit(data.user_id, data.tweet_id);
-    if(!insert.status)
-      callback(insert)
-    const tweet = await getTweetCount(data.tweet_id);
-    if(!tweet.status)
-      callback(tweet);
-    const room_id = tweet.data.rows[0].room_id;
+    const { stauts:insertStatus, message:insertMessage } = runGeneralSQL(SQL['insert-into-user-tweet-unit'], [ data.user_id, data.tweet_id ], Message['insert-into-user-tweet-unit'], null)
+    if(!insertStatus)
+      callback({'status':insertStatus, 'message':insertMessage})
+    const { rows, status, message } = await runGeneralSQL(SQL['get-tweet-count'], [ data.tweet_id ], Message['get-tweet-count'], null)
+    if(!status)
+      callback({ status, message });
+    const room_id = rows[0].room_id;
     callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
-    io.to(room_id).emit('update-tweet-information', { data: tweet.data.rows[0] });
+    io.to(room_id).emit('update-tweet-information', { data: rows[0] });
 
   })
 
   socket.on('notice-reading-tweet', async (data, callback) => {
-    const insert = await insertIntoUserTweetUnit(data.user_id, data.tweet_id);
-    if(!insert.status)
-      callback(insert)
-    const tweet = await getTweetCount(data.tweet_id);
-    if(!tweet.status)
-      callback(tweet);
-    const room_id = tweet.data.rows[0].room_id;
+    const { stauts:insertStatus, message:insertMessage } = runGeneralSQL(SQL['insert-into-user-tweet-unit'], [ data.user_id, data.tweet_id ], Message['insert-into-user-tweet-unit'], null)
+    if(!insertStatus)
+      callback({'status':insertStatus, 'message':insertMessage})
+    const { rows, status, message } = await runGeneralSQL(SQL['get-tweet-count'], [ data.tweet_id ], Message['get-tweet-count'], null)
+    if(!status)
+      callback({ rows, status, message });
+    const room_id = rows[0].room_id;
     callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
-    io.to(room_id).emit('update-tweet-information', { data: tweet.data.rows[0] });
+    io.to(room_id).emit('update-tweet-information', { data: rows[0] });
   })
 
   function generateRandomString(length) {
@@ -558,6 +564,14 @@ app.get("/publication", async function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' })
   response.json(data);
 });
+
+/**
+ * REST APIのPOSTで呟く
+ */
+app.get("/post/tweet", async function(request, response) {
+  logger.info(`/post/tweet,\t,request:${ request },\tresponse:${ response }`);
+});
+
 
 /**
  * Mail送信

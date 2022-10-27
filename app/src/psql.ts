@@ -21,61 +21,145 @@ const logger = getLogger();
 
 import { getImage, saveImage } from "./system";
 
+const SQL = {
+  'insert-into-picture': // 画像の追加
+    `insert into picture_table(label,path) values($1,$2) returning *;`,
+
+  'insert-tnto-pictweet': // 画像付き呟きの追加
+    `insert into tweet(tweet,room_id,user_id,picture_id,head) values($1,$2,$3,$4,$5) RETURNING *;`,
+
+  'select-room': // 部屋の取得
+    `SELECT A.id AS id, A.name AS name, A.openLevel AS openlevel, A.postLevel AS postlevel, A.latest AS latest, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND (A.id) = ($1);`,
+  
+  'select-users-followers': // ユーザーのフォロワーを取得
+    `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
+    FROM user_table AS A
+    JOIN picture_table AS B ON B.id = A.image
+    JOIN (
+      SELECT *
+      FROM user_friend_unit AS A
+      WHERE A.friend_id = $1
+    ) AS C ON A.id = C.user_id;`,
+
+  'select-users-friends': // ユーザーのフレンドを取得
+    `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
+    FROM user_table AS A
+    JOIN picture_table AS B ON B.id = A.image
+    JOIN (
+      SELECT *
+      FROM user_friend_unit AS A
+      WHERE A.user_id = $1
+    ) AS C ON A.id = C.friend_id;`,
+
+  'delete-from-picture': // 画像を削除
+    "DELETE FROM picture_table WHERE id = $1;",
+
+  'insert-into-tweet': // 呟きの追加
+    `insert into tweet(tweet,room_id,user_id,head) values($1,$2,$3,$4) RETURNING *;`,
+
+  'delete-from-tweet-in-room': // ルーム内の呟きを削除
+    "DELETE FROM tweet WHERE room_id=$1;",
+
+  'delete-from-tweet-by-user': // ユーザーを削除した時にツイート全てを削除
+    "DELETE FROM tweet WHERE (user_id)=($1);",
+
+  'get-tweet-count': // 呟きに対する既読数
+    `SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
+    JOIN(-- 呟きに対する既読数
+        SELECT tweet.id, COUNT(A.tweet_id)::int
+        FROM tweet
+        LEFT JOIN (
+            SELECT tweet_id
+            FROM user_tweet_unit
+        ) AS A ON tweet.id = A.tweet_id
+        GROUP BY tweet.id
+    ) AS A ON A.id = tweet.id
+    WHERE tweet.id = $1;`,
+
+  'insert-into-user':
+    "insert into user_table(id,name,password,image,mail,authority,publicity) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6,$7) returning *;",
+  
+  'delete-from-user':
+    "DELETE FROM user_table WHERE id=$1 RETURNING *;",
+
+  'insert-into-user-tweet-unit':
+    `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);`,
+
+  'insert-into-user-friend-unit':
+    `INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`,
+
+  'insert-into-user-room-unit':
+    "INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;",
+
+  'delete-from-user-room-unit-by-room':
+    "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;",
+
+  'delete-from-room':
+    "DELETE FROM chatroom WHERE (id)=($1);",
+
+  'delete-from-user-room-unit-by-user':
+    "DELETE FROM user_chatroom_unit WHERE (user_id)=($1);",
+  
+  'select-user-with-pass':
+    "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;",
+}
+
+const Message = {
+  'insert-into-picture':
+    { 'true': 'insert into pictureに成功しました。', 'false': 'insert into pictureに失敗しました。' },
+  'insert-tnto-pictweet':
+    { 'true': 'insert into pic-tweetに成功しました。', 'false': 'insert into pic-tweetに失敗しました。' },
+  'select-room':
+    { 'true': '成功', 'false': '失敗' },
+  'select-users-followers':
+    { 'true': '成功', 'false': '失敗' },
+  'select-users-friends':
+    { 'true': '成功', 'false': '失敗' },
+  'delete-from-picture':
+    { 'true': 'delete from roomに成功しました。', 'false': 'delete from roomに失敗しました。' },
+  'insert-into-tweet':
+    { 'true': 'insert into tweetに成功しました。', 'false': 'insert into tweetに失敗しました。' },
+  'delete-from-tweet-in-room':
+    { 'true': 'delete from tweet in roomに成功しました。', 'false': 'delete from tweet in room に失敗しました。' },
+  'delete-from-tweet-by-user':
+    { 'true': 'delete from tweet by userに成功しました。', 'false': 'delete from tweet by userに失敗しました。' },
+  'get-tweet-count':
+    { 'true': 'get tweet countに成功しました。', 'false': 'get tweet countに失敗しました。' },
+  'insert-into-user':
+    { 'true': 'insert into userに成功しました。', 'false': 'insert into userに失敗しました。' },
+  'delete-from-user':
+    { 'true': 'delete from userに成功しました。', 'false': 'delete from userに失敗しました。' },
+  'insert-into-user-tweet-unit':
+    { 'true': 'insert into user tweet unitに成功しました。', 'false': 'insert into user tweet unitに失敗しました。' },
+  'insert-into-user-friend-unit':
+    { 'true': 'insert into user friend unitに成功しました。', 'false': 'insert into user friend unitに失敗しました。' },
+  'insert-into-user-room-unit':
+  { 'true': 'insert into user-room unitに成功しました。', 'false': 'insert into user-room unitに失敗しました。' },
+  'delete-from-user-room-unit-by-room':
+    { 'true': 'delete from user-room unit by roomに成功しました。', 'false': 'delete from user-room unit by roomに失敗しました。' },
+  'delete-from-room':
+    { 'true': 'delete from roomに成功しました。', 'false': 'delete from roomに失敗しました。' },
+  'delete-from-user-room-unit-by-user':
+    { 'true': 'delete from user-room unit by userに成功しました。', 'false': 'delete from user-room unit by userに失敗しました。' },
+  'select-user-with-pass':
+    { 'true': 'select user with passに成功しました。', 'false': 'select user with passに失敗しました。' },
+  }
+
 // responseをそのままの形で返すパターン（insert,deleteはほとんどここに分類）
-function runGeneralSQL(sql: string, data: any[], message: object) {
+function runGeneralSQL(sql: string, data: any[], message: object, toPicture: any) { // toPictures→画像化させるもの
   const pool = new Pool(pool_data);
   return pool.query(sql, data).then(async (response) => {
     pool.end().then(() => 
       console.log('pool has ended')
     );
-    return { data: response, status: true, message: message['true'] };
+    if(toPicture != null) {
+      response.rows = response.rows.map(row => { return { ...row, [toPicture]:getImage(row[toPicture])}})
+    }
+    return { rows: response.rows, status: true, message: message['true'] };
   }).catch((error) => {
     logger.error(error);
     return { status: false, message: error.detail };
   })
-}
-
-function insertIntoPicture(label: String, path: String) {
-  console.log("insert into picture.")
-  const sql = `insert into picture_table(label,path) values($1,$2) returning *;`
-  const message = { 'true': 'insert into pictureに成功しました。', 'false': 'insert into pictureに失敗しました。' }
-  return runGeneralSQL(sql, [label, path], message);
-}
-
-function deleteFromPicture(id: String) {
-  console.log("delete from picture.")
-  const sql = "DELETE FROM picture_table WHERE id = $1;";
-  const message = { 'true': 'delete from pictureに成功しました。', 'false': 'delete from pictureに失敗しました。' }
-  return runGeneralSQL(sql, [id], message);
-}
-
-function insertIntoTweet(text: String, room_id: String, user_id: String, head: String) {
-  console.log("insert into tweet.")
-  const sql = `insert into tweet(tweet,room_id,user_id,head) values($1,$2,$3,$4) RETURNING *;`
-  const message = { 'true': 'insert into tweetに成功しました。', 'false': 'insert into tweetに失敗しました。' }
-  return runGeneralSQL(sql, [text, room_id, user_id, head], message);
-}
-
-function deleteFromTweetInRoom(room_id: number) {
-  console.log("delete from tweet in room.")
-  const sql = "DELETE FROM tweet WHERE room_id=$1;";
-  const message = { 'true': 'delete from tweet in roomに成功しました。', 'false': 'delete from tweet in room に失敗しました。' }
-  return runGeneralSQL(sql, [room_id], message);
-}
-
-function deleteFromTweetByUser(user_id: String) {
-  // これでは他のユーザーもいるルームの呟きも削除されてしまうので、「削除されましたユーザー」も作成しときたい。
-  console.log("delete from tweet by user.")
-  const sql = "DELETE FROM tweet WHERE (user_id)=($1);";
-  const message = { 'true': 'delete from tweet by userに成功しました。', 'false': 'delete from tweet by userに失敗しました。' }
-  return runGeneralSQL(sql, [user_id], message);
-}
-
-function insertIntoPicTweet(text: String, room_id: String, user_id: String, picture_id: String, head: String) {
-  console.log("insert into pic-tweet.")
-  const sql = `insert into tweet(tweet,room_id,user_id,picture_id,head) values($1,$2,$3,$4,$5) RETURNING *;`
-  const message = { 'true': 'insert into pic-tweetに成功しました。', 'false': 'insert into pic-tweetに失敗しました。' }
-  return runGeneralSQL(sql, [text, room_id, user_id, picture_id, head], message);
 }
 
 function getSingleTweet(tweet_id: String) {
@@ -209,79 +293,6 @@ function getTweetInPublicBefore(user_id: String, head_tweet_id: String) {
   })
 }
 
-
-function getTweetCount(tweet_id: String) {
-  console.log("get tweet-count.");
-  const sql = `SELECT tweet.id, tweet.room_id, A.count AS count FROM tweet
-  JOIN(-- 呟きに対する既読数
-      SELECT tweet.id, COUNT(A.tweet_id)::int
-      FROM tweet
-      LEFT JOIN (
-          SELECT tweet_id
-          FROM user_tweet_unit
-      ) AS A ON tweet.id = A.tweet_id
-      GROUP BY tweet.id
-  ) AS A ON A.id = tweet.id
-  WHERE tweet.id = $1;`
-  const pool = new Pool(pool_data);
-  const message = { 'true': 'get tweet countに成功しました。', 'false': 'get tweet countに失敗しました。' }
-  return runGeneralSQL(sql, [tweet_id], message);
-}
-
-function insertIntoUser(id: String, name: String, pass: String, image_id: String, mail: String, authority: Boolean) {
-  console.log("insert into user.")
-  const sql = "insert into user_table(id,name,password,image,mail,authority,publicity) values($1,$2,pgp_sym_encrypt($3,'password'),$4,$5,$6,$7) returning *;";
-  const message = { 'true': 'insert into userに成功しました。', 'false': 'insert into userに失敗しました。' }
-  return runGeneralSQL(sql, [id, name, pass, image_id, mail, authority, 1], message);
-}
-
-
-function deleteFromUser(id: String) {
-  console.log("delete from user.")
-  const sql = "DELETE FROM user_table WHERE id=$1 RETURNING *;";
-  const message = { 'true': 'delete from userに成功しました。', 'false': 'delete from userに失敗しました。' }
-  return runGeneralSQL(sql, [id], message);
-}
-
-function insertIntoUserTweetUnit(user_id: string, tweet_id: number) {
-  console.log("insert into user tweet unit.");
-  const sql = `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);`
-  const message = { 'true': 'insert into user tweet unitに成功しました。', 'false': 'insert into user tweet unitに失敗しました。' }
-  return runGeneralSQL(sql, [user_id, tweet_id], message);
-}
-
-function insertIntoUserFriendUnit(user_id: string, friend_id: string) {
-  console.log("insert into user friend unit.");
-  const sql = `INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`
-  const message = { 'true': 'insert into user friend unitに成功しました。', 'false': 'insert into user friend unitに失敗しました。' }
-  return runGeneralSQL(sql, [user_id, friend_id], message);
-}
-
-
-function insertIntoUserRoomUnit(user_id: string, room_id: number, authority: boolean, opening: boolean, posting: boolean) {
-  console.log("insert into user-room unit.")
-  const sql = "INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;"
-  const message = { 'true': 'insert into user-room unitに成功しました。', 'false': 'insert into user-room unitに失敗しました。' }
-  return runGeneralSQL(sql, [user_id, room_id, authority, opening, posting], message);
-}
-
-
-function deleteFromUserRoomUnitByRoom(room_id: number) {
-  console.log("delete from user-room unit by room.")
-  const sql = "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;";
-  const message = { 'true': 'delete from user-room unit by roomに成功しました。', 'false': 'delete from user-room unit by roomに失敗しました。' }
-  return runGeneralSQL(sql, [room_id], message);
-}
-
-
-function deleteFromUserRoomUnitByUserm(user_id: String) {
-  console.log("delete from user-room unit by user.")
-  const sql = "DELETE FROM user_chatroom_unit WHERE (user_id)=($1);";
-  const message = { 'true': 'delete from user-room unit by userに成功しました。', 'false': 'delete from user-room unit by userに失敗しました。' }
-  return runGeneralSQL(sql, [user_id], message);
-}
-
-
 /**
  * PostgreSQL上に部屋を作成して任意のユーザーを登録する関数。
  * @param chatroom_image テーブル名picture_tableのカラムid。
@@ -295,7 +306,7 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
   return pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel,start,latest) VALUES($1,$2,$3,$4,$5,$6) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level, 'now()', 'now()'])
   .then(async re=>{
     const insertRoom = re.rows.map(x => { return { ...x }; });
-    const userRoomUnit = await insertIntoUserRoomUnit(user_id, re.rows[0].id, true, true, true);
+    const userRoomUnit = await runGeneralSQL(SQL['insert-into-user-room-unit'], [ user_id, re.rows[0].id, true, true, true ], Message['insert-into-user-room-unit'], null)
     pool.end().then(() => console.log('pool has ended'));
     return userRoomUnit;
   })
@@ -307,10 +318,10 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
 
 async function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string, callback: Function){
   console.log("create user-room with picture.")
-  const result = await insertIntoPicture(picture_label, picture_path);
-  if(result.status){
+  const  { rows, status } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
+  if(status){
     // 修正予定
-    return await createUserRoom(result.data.rows[0].id, result.data.rows[0].path, chatroom_name, user_id, open_level, post_level);
+    return await createUserRoom(rows[0].id, rows[0].path, chatroom_name, user_id, open_level, post_level);
   }else{
     return { message: "部屋の画像の登録に失敗しました", status: false };
   }
@@ -324,7 +335,7 @@ async function createUserRoomWithPicture(chatroom_name: string, user_id: string,
  */
 async function addUserIntoRoom(user_id: string, room_id: number, opening: boolean, posting: boolean, io: any){
   console.log("add user into room.")
-  const insert = await insertIntoUserRoomUnit(user_id, room_id, false, opening, posting);
+  const insert = await runGeneralSQL(SQL['insert-into-user-room-unit'], [ user_id, room_id, false, opening, posting ], Message['insert-into-user-room-unit'], null)
   if(!insert.status)
     return insert;
   return await sendUpdatedRoomUsers(user_id, room_id, io);
@@ -410,43 +421,19 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
 async function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
     console.log("add user with picture.");
     const pool = new Pool(pool_data);
-    const pict = await insertIntoPicture(picture_label, picture_path);
-    if(!pict.status)
-      return pict;
-    const insert = await insertIntoUser(user_id, user_name, user_password, pict.data.rows[0].id, user_mail, user_authority);
-    if(!insert.status){
-      console.log(deleteFromPicture(pict.data.rows[0].id));
-      return insert
+    const { rows, status, message } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
+    if(!status)
+      return { rows, status, message };
+    const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['insert-into-user'], [ user_id, user_name, user_password, rows[0].id, user_mail, user_authority ], Message['insert-into-user'], null)
+    if(!userStatus){
+      console.log(runGeneralSQL(SQL['delete-from-picture'], [ rows[0].id ], Message['delete-from-picture'], null));
+      return { 'rows':userRows, 'status':userStatus, 'message':userMessage }
     }
     //修正予定
-    const room = await createUserRoom(insert.data.rows[0].image, picture_path, insert.data.rows[0].name, insert.data.rows[0].id, 1, 1);
+    const room = await createUserRoom(userRows[0].image, picture_path, userRows[0].name, userRows[0].id, 1, 1);
     if(!room.status)
-      console.log(deleteFromPicture(pict.data.rows[0].id));
+      console.log(runGeneralSQL(SQL['delete-from-picture'], [ rows[0].id ], Message['delete-from-picture'], null));
     return room;
-}
-
-
-
-function deleteFromRoom(room_id: number) {
-  console.log("delete from room.")
-  const sql = "DELETE FROM chatroom WHERE (id)=($1);";
-  const message = { 'true': 'delete from roomに成功しました。', 'false': 'delete from roomに失敗しました。' }
-  return runGeneralSQL(sql, [room_id], message);
-}
-
-function selectRoom(room_id: number) {
-  console.log("select room.")
-  const pool = new Pool(pool_data);
-  return pool.query("SELECT A.id AS id, A.name AS name, A.openLevel AS openlevel, A.postLevel AS postlevel, A.latest AS latest, B.path AS picture FROM chatroom AS A, picture_table AS B WHERE A.icon=B.id AND (A.id) = ($1);", [room_id])
-  .then(async (res) => {
-    var rows = (res.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: rows, status: true };
-  })
-  .catch((err) => {
-    logger.error(err);
-    return { status: false, message: "エラーが生じました。" };
-  });
 }
 
 function selectAllRoom(callback: Function){
@@ -582,14 +569,14 @@ function getRoomStatusForUser(room_id: number, user_id: string) {
 async function deleteRoom(room_id: number){
   console.log("delete room.")
   const pool = new Pool(pool_data);
-  const del_unit = await deleteFromUserRoomUnitByRoom(room_id); 
+  const del_unit = await runGeneralSQL(SQL['delete-from-user-room-unit-by-room'], [ room_id ], Message['delete-from-user-room-unit-by-room'], null)
   if(!del_unit.status)
     return del_unit;
-  const del_room = await deleteFromRoom(room_id);
+  const del_room = await runGeneralSQL(SQL['delete-from-room'], [ room_id ], Message['delete-from-room'], null)
   if(!del_room.status)
     return del_room;
-  const del_tweet = await deleteFromTweetInRoom(room_id);
-  return del_tweet;
+  const { status, message } = await runGeneralSQL(SQL['delete-from-tweet-in-room'], [ room_id ], Message['delete-from-tweet-in-room'], null)
+  return { status, message };
   // pictureも消さなければいけないかも
 }
 
@@ -664,53 +651,6 @@ function selectUsersInRoom(room_id: string){
   })
 }
 
-function selectUsersFriends(user_id: string) {
-  console.log("select users friends.");
-  const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
-  FROM user_table AS A
-  JOIN picture_table AS B ON B.id = A.image
-  JOIN (
-    SELECT *
-    FROM user_friend_unit AS A
-    WHERE A.user_id = $1
-  ) AS C ON A.id = C.friend_id;`
-  return pool.query(sql, [user_id])
-  .then(async (response) => {
-    let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: friends };
-  })
-  .catch(error => {
-    logger.error(error);
-    return { status: false, message: error.detail };
-  })
-}
-
-// selectUsersFriendsとほぼ変わらないからまとめたい！
-function selectUsersFollowers(user_id: string) {
-  console.log("select users followers.");
-  const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, B.path AS picture, A.mail AS mail, A.authority AS authority, A.publicity AS publicity
-  FROM user_table AS A
-  JOIN picture_table AS B ON B.id = A.image
-  JOIN (
-    SELECT *
-    FROM user_friend_unit AS A
-    WHERE A.friend_id = $1
-  ) AS C ON A.id = C.user_id;`
-  return pool.query(sql, [user_id])
-  .then(async (response) => {
-    let friends = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: friends };
-  })
-  .catch(error => {
-    logger.error(error);
-    return { status: false, message: error.detail };
-  })
-}
-
 function selectFriendNotInRoom(room_id: string, user_id: string) {
   console.log("select friend not in room.")
   const pool = new Pool(pool_data);
@@ -775,13 +715,6 @@ function updateUser(id: string, name: string, mail: string, authority: boolean, 
   })
 }
 
-function selectUserWithPass(id: string, password: string) {
-  logger.info("select user with pass.");
-  const sql = "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;";
-  const message = { 'true': 'select user with passに成功しました。', 'false': 'select user with passに失敗しました。' }
-  return runGeneralSQL(sql, [id, password], message)
-}
-
 function selectUserWithId(keyword: string) {
   console.log("select user with id.")
   const pool = new Pool(pool_data);
@@ -801,7 +734,7 @@ function selectUserWithId(keyword: string) {
 
 async function checkAndUpdateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, publicity: number){
   console.log("check and update user", id, name, mail, authority, publicity);
-  const select = await selectUserWithPass(id, password);
+  const select = await runGeneralSQL(SQL['select-user-with-pass'], [ id, password ], Message['select-user-with-pass'], null)
   if(!select.status)
     return select;
   if(select.data.rows.length !== 1)
@@ -821,14 +754,14 @@ async function checkAndUpdateUser(id: string, name: string, picture: any, passwo
 
 async function deleteUser(user_id: string){
   console.log("delete user");
-  const del_unit = await deleteFromUserRoomUnitByUserm(user_id);
+  const del_unit = await runGeneralSQL(SQL['delete-from-user-room-unit-by-user'], [ user_id ], Message['delete-from-user-room-unit-by-user'], null)
   if(!del_unit.status)
     return del_unit;
-  const del_tweet = await deleteFromTweetByUser(user_id); //「削除されたユーザー用ユーザー」を作成して代替えしたい。
-  if(!del_tweet.status)
-    return del_tweet;
-  const del_user = await deleteFromUser(user_id); 
-  return del_user;
+  const { status, message } = await runGeneralSQL(SQL['delete-from-tweet-by-user'], [ user_id ], Message['delete-from-tweet-by-user'], null) //「削除されたユーザー用ユーザー」を作成して代替えしたい。
+  if(!status)
+    return { status, message };
+  const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['delete-from-user'], [ user_id ], Message['delete-from-user'], null)
+  return { 'rows':userRows, 'status':userStatus, 'message':userMessage };
   // 画像も削除しなければならない！！
 }
 
@@ -1186,20 +1119,17 @@ function getMemberInEachRoom(user_id: String) {
 }
 
 export {
-  insertIntoPicture,
-  insertIntoTweet,
-  insertIntoPicTweet,
+  SQL,
+  Message,
+  runGeneralSQL,
   getSingleTweet,
   getCommonTweetsInRoom,
   getTweetInPublic,
   getTweetInPublicBefore,
-  getTweetCount,
   addUserIntoRoom,
   updateUserInRoom,
   removeUserFromRoom,
   addUserWithPicture,
-  insertIntoUserTweetUnit,
-  insertIntoUserFriendUnit,
   createUserRoomWithPicture,
   getRoomStatus,
   getRoomStatusForUser,
@@ -1208,14 +1138,11 @@ export {
   selectUsersByPublicity,
   selectAllUser,
   selectUsersInRoom,
-  selectUsersFriends,
-  selectUsersFollowers,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
   checkAndUpdateUser,
   deleteUser,
-  selectRoom,
   selectAllRoom,
   selectCommonRoom,
   selectRoomPublication,
