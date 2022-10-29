@@ -46,7 +46,7 @@ import {
   getMemberInEachRoom,
 } from "./psql";
 
-import Response from "./Response";
+import { Request, Response } from "./Response";
 import { getImage, setImage, isExisted } from "./system";
 import { configure, getLogger } from "log4js";
 configure({
@@ -138,28 +138,6 @@ io.on('connection', socket => {
     .catch(err => {
       logger.error(err)
     })
-  })
-
-  socket.on('get-tweet-in-public', async (data, callback) => {
-    callback(await getTweetInPublic(data.user_id));
-  })
-
-  socket.on('get-tweet-in-public-before', async (data, callback) => {
-    callback(await getTweetInPublicBefore(data.user_id, data.head_tweet_id));
-  })
-
-  socket.on('first-login-room', async (data, callback) => {
-    logger.info(`socket.on:${ "first-login-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id }`);
-    const rooms = await getInitialRoom(data.id);
-    if(!rooms.status)
-      callback(rooms);
-    for(const val of rooms.data){
-      CHATROOMS.push(val.chatroom_id);
-      socket.join(val.chatroom_id);
-    }
-    UserID = data.id
-    socket.join(`@${UserID}`);//@user id.
-    callback({rows: rooms.data});
   })
 
   function divideByRoom (objects: Array<Object>, key: string){
@@ -429,6 +407,42 @@ io.on('connection', socket => {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
   }
 
+  socket.on('/socket/server', async (req, callback) => {
+    logger.info('/socket/server')
+    const { rest, data } = req
+    const request = new Request('/socket/server', rest, data);
+    switch(rest) {
+      case '/first-login-room':
+        logger.info('/first-login-room')
+        const rooms = await getInitialRoom(data.id);
+        if(!rooms.status)
+          callback(rooms);
+        for(const val of rooms.data){
+          CHATROOMS.push(val.chatroom_id);
+          socket.join(val.chatroom_id);
+        }
+        UserID = data.id
+        socket.join(`@${UserID}`);//@user id.
+        callback({rows: rooms.data});
+        break
+      // 呟く
+      case '/chat':
+        logger.info('/chat')
+        callback(await runProcesePerCondition(request));
+        break
+      // get-tweet-in-public
+      case '/tweet/public':
+        logger.info('/tweet/public')
+        callback(await runProcesePerCondition(request))
+        break
+      // get-tweet-in-public-before
+      case '/tweet/public/before':
+        logger.info('/tweet/public/before')
+        callback(await runProcesePerCondition(request))
+        break
+    }
+  })
+
   socket.on('read-signal', async (data, callback) => {
     logger.info('read-signal');
     const signal = data['signal'];
@@ -443,27 +457,69 @@ io.on('connection', socket => {
         socket.leave(Number(data['data']['room_id']));
         CHATROOMS = CHATROOMS.filter(x => x!==Number(data['data']['room_id']));
         break;
-      case '/chat': // 呟く
-        logger.info(`/chat→socket.on:${ "chat" },\tkeys:${ Object.keys(data) },\ttext:${ data.text },\tuser:${ data.user },\troom:${ data.room }`);
-        const result = await chat(data.user, data.room, data.text, data.picture, data.head)
-        // 呟きを知らせる処理
-        if(result.status && CHATROOMS.includes(data.room)){
-          console.log('通知を送る')
-          io.to(data.room).emit('receive-notification', result.data[0])
-          const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
-          if(room[0]["openlevel"]===3){
-            const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
-            io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
-            rows.forEach((usr, idx) => {
-              io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
-            })
-          }
-        }
-        callback(new Response(result.status, [], "chat success"));
-        break;
     }
   })
 });
+
+/**
+ * SocketとREST APIで共通する処理
+ * @param request 
+ * @returns 
+ */
+async function runProcesePerCondition(request:Request) {
+  logger.info('runProcesePerCondition');
+  logger.info(request);
+  switch(request.rest) {
+    // 呟き
+    case "/chat":
+      logger.info('/chat');
+      var { data } = request;
+      var result = await chat(data.user, data.room, data.text, data.picture, data.head)
+      // 呟きを知らせる処理
+      if(result.status && CHATROOMS.includes(data.room)){
+        console.log('通知を送る')
+        io.to(data.room).emit('receive-notification', result.data[0])
+        const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
+        if(room[0]["openlevel"]===3){
+          const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
+          io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
+          rows.forEach((usr, idx) => {
+            io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
+          })
+        }
+      }
+      return new Response(result.status, [], "chat success", request)
+    // get-tweet-in-public
+    case "/tweet/public":
+      logger.info("/tweet/public")
+      var { status, rows, message } = await getTweetInPublic(request.data.user_id);
+      return new Response(status, rows, message, request)
+    // get-tweet-in-public-before
+    case "/tweet/public/before":
+      logger.info("/tweet/public/before")
+      var { status, rows, message } = await getTweetInPublicBefore(request.data.user_id, request.data.head_tweet_id);
+      return new Response(status, rows, message, request)
+    // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
+    case "/mail":
+      logger.info("/mail")
+      var status:any = false;
+      var message:any = '';
+      var { data } = request; // .mail .subject .text
+      if('mail' in data && 'subject' in data && 'text' in data) {
+        // 相手に送信完了メール
+        var message1 = `以下のメッセージを送信しました\n件名:${data.subject}\n内容:${data.text}`
+        sendMail(data.mail, `From Shinjo Sato Website`, message1)
+        message += message1+'\n'
+        // 特定のアドレスに通知メール
+        var message2 = 'ウェブサイトから以下のメッセージを取得しました。\n↓\n'+data.text
+        sendMail('nomi.shinjo@gmail.com', 'From website: '+data.subject, message2)
+        message += message2
+        // 送信完了
+        status = true
+      }
+      return new Response(status, rows, message, request)
+  }
+}
 
 /**
  * 呟き処理。
@@ -523,6 +579,28 @@ app.post("/disconnected", function (request, response) {
   response.json({message: "OK!", data: request.body});
 });
 
+// APIを管理する関数
+app.post("/api", async function (req, response) {
+  logger.info('/api')
+  logger.info(req)
+  response.set({ 'Access-Control-Allow-Origin': '*' });
+  // 今後、API-KEYのようなもので認証させたい。
+  const { rest, data } = req.body
+  const request = new Request('/api', rest, data)
+  switch(rest) {
+    // 動作テスト用API
+    case '/test':
+      logger.info('/test')
+      response.json(new Response(true, [], 'API送受信に成功しました。', request))
+      break
+    // メール送信
+    case '/mail':
+      logger.info('/mail')
+      var { status, rows, message } = await runProcesePerCondition(request)
+      response.json(new Response(status, rows, message, request))
+  }
+})
+
 /**
  * ユーザーを作成するのと同時にそのユーザー専用のRoomを作成する。
  */
@@ -564,33 +642,6 @@ app.get("/publication", async function (request, response) {
   response.set({ 'Access-Control-Allow-Origin': '*' })
   response.json(data);
 });
-
-/**
- * REST APIのPOSTで呟く
- */
-app.get("/post/tweet", async function(request, response) {
-  logger.info(`/post/tweet,\t,request:${ request },\tresponse:${ response }`);
-});
-
-
-/**
- * Mail送信
- * 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
- */
- app.post("/mail", async function (request, response) {
-  response.set({ 'Access-Control-Allow-Origin': '*' });
-  logger.info(`/mail,\trequest:${ request },\tresponse:${ response }`);
-  logger.info('request:', request)
-  const { body } = request; // .mail .subject .text
-  if('mail' in body && 'subject' in body && 'text' in body) {
-    // 相手に送信完了メール
-    sendMail(body.mail, `From Shinjo Sato Website`, `以下のメッセージを送信しました\n件名:${body.subject}\n内容:${body.text}`)
-    // 特定のアドレスに通知メール
-    sendMail('nomi.shinjo@gmail.com', 'From website: '+body.subject, 'ウェブサイトから以下のメッセージを取得しました。\n↓\n'+body.text)
-  }
-  response.json({ test: '送信完了' });
-});
-
 
 async function sendMail(address: string, subject: string, text: string) {
   logger.info('send e-mail to:\t', address, subject, text)

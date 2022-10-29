@@ -250,7 +250,7 @@ function getTweetInPublic(user_id: String) {
       return tmp;
     });
     pool.end().then(() => console.log('pool has ended'));
-    return { message: "サクセス", status: true, data: tweet };
+    return { message: "サクセス", status: true, rows: tweet };
   })
   .catch((error) => {
     logger.error(error);
@@ -287,7 +287,7 @@ function getTweetInPublicBefore(user_id: String, head_tweet_id: String) {
       return tmp;
     });
     pool.end().then(() => console.log('pool has ended'));
-    return { message: "サクセス", status: true, data: tweet };
+    return { message: "サクセス", status: true, rows: tweet };
   })
   .catch((error) => {
     logger.error(error);
