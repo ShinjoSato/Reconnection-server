@@ -402,7 +402,7 @@ io.on('connection', socket => {
   socket.on('/socket/server', async (req, callback) => {
     logger.info('/socket/server')
     const { rest, data } = req
-    const request = new Request('/socket/server', rest, data);
+    const request = new Request('/socket/server', rest, data, null);
     switch(rest) {
       case '/first-login-room':
         logger.info('/first-login-room')
@@ -627,20 +627,29 @@ app.post("/api", async function (req, response) {
   logger.info('/api')
   logger.info(req)
   response.set({ 'Access-Control-Allow-Origin': '*' });
-  // 今後、API-KEYのようなもので認証させたい。
-  const { rest, data } = req.body
-  const request = new Request('/api', rest, data)
+  // 今後、API-KEYのようなもので認証させたい。→ appid
+  const { rest, data, appid } = req.body
+  const request = new Request('/api', rest, data, appid)
   switch(rest) {
     // 動作テスト用API
     case '/test':
       logger.info('/test')
       response.json(new Response(true, [], 'API送受信に成功しました。', request))
       break
+    // 呟く
+    case '/chat':
+      logger.info('/chat')
+      response.json(await runProcesePerCondition(request))
+      break
     // メール送信
     case '/mail':
       logger.info('/mail')
       var { status, rows, message } = await runProcesePerCondition(request)
       response.json(new Response(status, rows, message, request))
+      break
+    default:
+      logger.info('default')
+      response.json(new Response(false, [], '一致するAPIが存在しませんでした。', request))
   }
 })
 

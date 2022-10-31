@@ -2,14 +2,16 @@
 export interface RequestInterface {
     url: string; // /socket/server, /socket/client or /api
     rest: string; // /.../... 
-    data: any;
+    data: object|null;
+    appid: string|null; // socket通信時はnull, REST API時は必須
 }
 
 export class Request implements RequestInterface {
     constructor (
         public url: string,
         public rest: string,
-        public data: any,
+        public data: object|null,
+        public appid: string|null,
     ) {}
 }
 
