@@ -38,9 +38,7 @@ import {
   updateRoomlatest,
   getSingleRoom,
   getTweetInSingleRoom,
-  getTweetInEachRoom,
   getPicTweetInSingleRoom,
-  getPicTweetInEachRoom,
   getInitialRoom,
   getRoomsUserBelong,
   getMemberInEachRoom,
@@ -153,20 +151,6 @@ io.on('connection', socket => {
   socket.on('get-tweets-in-room', async (data, callback) => {// swift用に用意
     callback(await getTweetInSingleRoom(data.user_id, data.room_id));
   })
-
-  // これを廃止して個別に送信するようにさせたい
-  // socket.on('get-entire-login-set', async (data, callback) => {
-  //   console.log(`get entire login set.`)
-  //   let sets = { et_tweet: null, et_pictweet: null, init_room: null, entire_room: null, entire_user: null };
-  //   sets.et_tweet = divideByRoom(await getTweetInEachRoom(data.user_id), 'room_id');
-  //   sets.et_pictweet = divideByRoom(await getPicTweetInEachRoom(data.user_id), 'room_id');
-  //   const init_room = await getInitialRoom(data.user_id);
-  //   sets.init_room = init_room.data;
-  //   sets.entire_room = divideByRoom((await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')).rows, 'id');
-  //   // sets.entire_room = divideByRoom((await getRoomsUserBelong(data.user_id)).rows, 'id'); // get-users-rooms
-  //   sets.entire_user = divideByRoom(await getMemberInEachRoom(data.user_id), 'room_id'); // get-users-friends
-  //   callback(sets);
-  // })
 
   socket.on('new-message', async (data, callback) => {
     const tweet = await getSingleTweet(data.id);
@@ -383,18 +367,6 @@ io.on('connection', socket => {
 
   })
 
-  socket.on('notice-reading-tweet', async (data, callback) => {
-    const { stauts:insertStatus, message:insertMessage } = runGeneralSQL(SQL['insert-into-user-tweet-unit'], [ data.user_id, data.tweet_id ], Message['insert-into-user-tweet-unit'], null)
-    if(!insertStatus)
-      callback({'status':insertStatus, 'message':insertMessage})
-    const { rows, status, message } = await runGeneralSQL(SQL['get-tweet-count'], [ data.tweet_id ], Message['get-tweet-count'], null)
-    if(!status)
-      callback({ rows, status, message });
-    const room_id = rows[0].room_id;
-    callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
-    io.to(room_id).emit('update-tweet-information', { data: rows[0] });
-  })
-
   function generateRandomString(length) {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
   }
@@ -482,11 +454,11 @@ io.on('connection', socket => {
 async function runProcesePerCondition(request:Request) {
   logger.info('runProcesePerCondition');
   logger.info(request);
+  const data:{[key: string]: any} = request.data
   switch(request.rest) {
     // 呟き
     case "/chat":
       logger.info('/chat');
-      var { data } = request;
       var result = await chat(data.user, data.room, data.text, data.picture, data.head)
       // 呟きを知らせる処理
       if(result.status && CHATROOMS.includes(data.room)){
@@ -505,36 +477,35 @@ async function runProcesePerCondition(request:Request) {
     // get-tweet-in-public
     case "/tweet/public":
       logger.info("/tweet/public")
-      var { status, rows, message } = await getTweetInPublic(request.data.user_id);
+      var { status, rows, message } = await getTweetInPublic(data.user_id);
       return new Response(status, rows, message, request)
     // get-tweet-in-public-before
     case "/tweet/public/before":
       logger.info("/tweet/public/before")
-      var { status, rows, message } = await getTweetInPublicBefore(request.data.user_id, request.data.head_tweet_id);
+      var { status, rows, message } = await getTweetInPublicBefore(data.user_id, data.head_tweet_id);
       return new Response(status, rows, message, request)
     // ユーザーが属する部屋リスト取得
     case "/user/room":
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ request.data.user_id ], Message['/sql/user/room'], 'picture')
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')
       return new Response(status, rows, message, request)
     case "/room/tweet": // ※送り手と受け手で既読などの取得データが異なる
       logger.info(request.rest)
-      var { status, rows, message } = await getTweetInSingleRoom(request.data.user_id, request.data.room_id)
+      var { status, rows, message } = await getTweetInSingleRoom(data.user_id, data.room_id)
       return new Response(status, rows, message, request)
     case "/room/user":
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ request.data.room_id ], Message['/sql/room/user'], 'picture')
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
       return new Response(status, rows, message, request)
     case '/room/tweet/picture':
       logger.info(request.rest)
-      var { status, rows, message } = await getPicTweetInSingleRoom(request.data.user_id, request.data.room_id)
+      var { status, rows, message } = await getPicTweetInSingleRoom(data.user_id, data.room_id)
       return new Response(status, rows, message, request)
     // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
     case "/mail":
       logger.info("/mail")
       var status:any = false;
       var message:any = '';
-      var { data } = request; // .mail .subject .text
       if('mail' in data && 'subject' in data && 'text' in data) {
         // 相手に送信完了メール
         var message1 = `以下のメッセージを送信しました\n件名:${data.subject}\n内容:${data.text}`

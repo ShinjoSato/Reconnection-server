@@ -851,66 +851,6 @@ function getTweetInSingleRoom(user_id: String, room_id: number) {
   })
 }
 
-/**
- * ユーザーが属する部屋毎の呟きを取得。
- * @param user_id 
- * @returns 
- */
-function getTweetInEachRoom(user_id: String) {
-  console.log("get tweet in each room.")
-  const pool = new Pool(pool_data);
-  const sql = `
-  SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
-  JOIN (
-      SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-      JOIN picture_table ON user_table.image = picture_table.id
-  ) AS user_table ON tweet.user_id = user_table.id
-  LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-  JOIN(
-    SELECT * FROM user_chatroom_unit
-    WHERE user_id = $1
-  ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
-  JOIN (
-    -- ツイートの既読数と既読or未読を表すSELECT文
-    SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
-    JOIN(-- 呟きに対する既読数
-        SELECT tweet.id, COUNT(A.tweet_id)::int
-        FROM tweet
-        LEFT JOIN (
-            SELECT tweet_id
-            FROM user_tweet_unit
-        ) AS A ON tweet.id = A.tweet_id
-        GROUP BY tweet.id
-    ) AS A ON A.id = tweet.id
-    JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
-        SELECT tweet.id, COUNT(A.tweet_id)::int
-        FROM tweet
-        LEFT JOIN (
-            SELECT tweet_id
-            FROM user_tweet_unit
-            WHERE user_id = $2
-        ) AS A ON tweet.id = A.tweet_id
-        GROUP BY tweet.id
-    ) AS B ON B.id = tweet.id
-  ) AS C ON tweet.id = C.id
-  ORDER BY tweet.room_id, tweet.id DESC;`;
-  return pool.query(sql, [user_id, user_id])
-  .then(async (response) => {
-    var tweets = (response.rows).map((row) => {
-      let tmp = { ...row, user_icon: getImage(row.user_icon) };
-      if(tmp.picture){
-        tmp.picture = getImage(tmp.picture);
-      }
-      return tmp;
-    });
-    pool.end().then(() => console.log('pool has ended'));
-    return tweets;
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラー1" };
-  })
-}
-
 function getPicTweetInSingleRoom(user_id: String, room_id: number) {
   console.log("get pic-tweet in single-room.")
   const pool = new Pool(pool_data);
@@ -954,62 +894,6 @@ function getPicTweetInSingleRoom(user_id: String, room_id: number) {
   }).catch((error2) => {
     logger.error(error2);
     return { status: false, rows:[], message: "エラー2" };
-  })
-}
-
-
-/**
- * ユーザーが属する部屋毎の画像付き呟きを取得。
- * @param user_id 
- * @returns 
- */
-function getPicTweetInEachRoom(user_id: String) {
-  console.log("get pic-tweet in each room.")
-  const pool = new Pool(pool_data);
-  const sql = `
-  SELECT tweet.id, tweet.room_id, tweet.tweet, tweet.head, tweet.time, user_table.name AS user, user_table.id AS user_id, user_table.path AS user_icon, picture_table.path AS picture, C.count AS count, C.check AS check FROM tweet
-  JOIN (
-      SELECT user_table.id,user_table.name,picture_table.path FROM user_table
-      JOIN picture_table ON user_table.image = picture_table.id
-  ) AS user_table ON tweet.user_id = user_table.id
-  LEFT JOIN picture_table ON tweet.picture_id = picture_table.id
-  JOIN(
-    SELECT * FROM user_chatroom_unit
-    WHERE user_id = $1
-  ) AS user_chatroom_unit ON user_chatroom_unit.chatroom_id = tweet.room_id
-  JOIN (
-    -- ツイートの既読数と既読or未読を表すSELECT文
-    SELECT tweet.id, A.count AS count, B.count AS check FROM tweet
-    JOIN(-- 呟きに対する既読数
-        SELECT tweet.id, COUNT(A.tweet_id)::int
-        FROM tweet
-        LEFT JOIN (
-            SELECT tweet_id
-            FROM user_tweet_unit
-        ) AS A ON tweet.id = A.tweet_id
-        GROUP BY tweet.id
-    ) AS A ON A.id = tweet.id
-    JOIN(-- 特定のユーザーが呟きを既に読んだ時に1, 読んでいない時に0を示す
-        SELECT tweet.id, COUNT(A.tweet_id)::int
-        FROM tweet
-        LEFT JOIN (
-            SELECT tweet_id
-            FROM user_tweet_unit
-            WHERE user_id = $2
-        ) AS A ON tweet.id = A.tweet_id
-        GROUP BY tweet.id
-    ) AS B ON B.id = tweet.id
-  ) AS C ON tweet.id = C.id
-  WHERE tweet.picture_id IS NOT NULL
-  ORDER BY tweet.id DESC;`
-  return pool.query(sql, [user_id, user_id])
-  .then(async (response) => {
-    var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-    pool.end().then(() => console.log('pool has ended'));
-    return tweets;
-  }).catch((error2) => {
-    logger.error(error2);
-    return { message: "エラー2" };
   })
 }
 
@@ -1149,9 +1033,7 @@ export {
   updateRoomlatest,
   getSingleRoom,
   getTweetInSingleRoom,
-  getTweetInEachRoom,
   getPicTweetInSingleRoom,
-  getPicTweetInEachRoom,
   getInitialRoom,
   getRoomsUserBelong,
   getMemberInEachRoom,
