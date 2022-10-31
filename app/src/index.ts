@@ -26,7 +26,6 @@ import {
   selectUser,
   selectUsersByPublicity,
   selectAllUser,
-  selectUsersInRoom,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
@@ -40,6 +39,7 @@ import {
   getSingleRoom,
   getTweetInSingleRoom,
   getTweetInEachRoom,
+  getPicTweetInSingleRoom,
   getPicTweetInEachRoom,
   getInitialRoom,
   getRoomsUserBelong,
@@ -140,20 +140,10 @@ io.on('connection', socket => {
     })
   })
 
-  function divideByRoom (objects: Array<Object>, key: string){
-    let rooms = {};
-    for(const obj of objects){
-      if(obj[key] in rooms){
-        rooms[obj[key]].push(obj);
-      }else{
-        rooms[obj[key]] = [obj];
-      }
-    }
-    return rooms;
-  }
-
+  // 全てを一度にではなく、個々の部屋を個別に取得させるようにしたい?もうなっている！？
   socket.on('get-users-rooms', async (data, callback) => {// swift用に用意
-    callback(divideByRoom(await getRoomsUserBelong(data.user_id), 'id'));
+    const result = await getRoomsUserBelong(data.user_id)
+    callback(divideByRoom(result.rows, 'id'));
   })
 
   socket.on('get-users-friends', async (data, callback) => {// swift用に用意
@@ -164,17 +154,19 @@ io.on('connection', socket => {
     callback(await getTweetInSingleRoom(data.user_id, data.room_id));
   })
 
-  socket.on('get-entire-login-set', async (data, callback) => {
-    console.log(`get entire login set.`)
-    let sets = { et_tweet: null, et_pictweet: null, init_room: null, entire_room: null, entire_user: null };
-    sets.et_tweet = divideByRoom(await getTweetInEachRoom(data.user_id), 'room_id');
-    sets.et_pictweet = divideByRoom(await getPicTweetInEachRoom(data.user_id), 'room_id');
-    const init_room = await getInitialRoom(data.user_id);
-    sets.init_room = init_room.data;
-    sets.entire_room = divideByRoom(await getRoomsUserBelong(data.user_id), 'id')
-    sets.entire_user = divideByRoom(await getMemberInEachRoom(data.user_id), 'room_id');
-    callback(sets);
-  })
+  // これを廃止して個別に送信するようにさせたい
+  // socket.on('get-entire-login-set', async (data, callback) => {
+  //   console.log(`get entire login set.`)
+  //   let sets = { et_tweet: null, et_pictweet: null, init_room: null, entire_room: null, entire_user: null };
+  //   sets.et_tweet = divideByRoom(await getTweetInEachRoom(data.user_id), 'room_id');
+  //   sets.et_pictweet = divideByRoom(await getPicTweetInEachRoom(data.user_id), 'room_id');
+  //   const init_room = await getInitialRoom(data.user_id);
+  //   sets.init_room = init_room.data;
+  //   sets.entire_room = divideByRoom((await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')).rows, 'id');
+  //   // sets.entire_room = divideByRoom((await getRoomsUserBelong(data.user_id)).rows, 'id'); // get-users-rooms
+  //   sets.entire_user = divideByRoom(await getMemberInEachRoom(data.user_id), 'room_id'); // get-users-friends
+  //   callback(sets);
+  // })
 
   socket.on('new-message', async (data, callback) => {
     const tweet = await getSingleTweet(data.id);
@@ -185,10 +177,10 @@ io.on('connection', socket => {
 
   socket.on('receive-room-member', async (data, callback) => {
     console.log("receive room member.");
-    const users = await selectUsersInRoom(data.id);
-    if(!users.status)
-      callback(users);
-    callback({ rows: users.data });
+    const { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ data.id ], Message['/sql/room/user'], 'picture')
+    if(!status)
+      callback({ status, rows, message });
+    callback({ rows });
   })
 
   socket.on("receive-not-room-member-but-friend", async (data,callback) => {
@@ -210,9 +202,9 @@ io.on('connection', socket => {
     logger.info(`socket.on:${ "add-user-into-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
     let result = await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io);
     callback(result);
-    const roomMembers = await selectUsersInRoom(data.room_id);
+    const { rows } = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
     const user = await selectUser(data.user_id);
-    roomMembers.data.forEach((member, index) => {
+    rows.forEach((member, index) => {
       io.to(`@${member.user_id}`).emit('receive-signal', { ...user, signal: '002002', status: true, room_id: Number(data.room_id) });
     })
     const singleRoom = await getSingleRoom(data.user_id, data.room_id);
@@ -235,7 +227,7 @@ io.on('connection', socket => {
       // ユーザーのserverでreaveをさせたい！
 
       // 他のユーザーに退室を通達,部屋の更新
-      const roomMembers = await selectUsersInRoom(data.room_id);
+      const roomMembers = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
       roomMembers.data.forEach((member, index) => {
         io.to(`@${member.user_id}`).emit('receive-signal', { data: {...result, user_id: data.user_id, room_id: data.room_id}, signal: '002997', status: true });
       })
@@ -295,10 +287,10 @@ io.on('connection', socket => {
 
   socket.on('select-users-in-room', async (data, callback) => {
     console.log('select users in room.');
-    const users = await selectUsersInRoom(data.room_id);
-    if(!users.status)
-      callback(users);
-    callback({ rows: users.data });
+    const response = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
+    if(!response.status)
+      callback(response);
+    callback({  status: response.status, rows: response.rows, message: response.message });
   });
 
   socket.on('update-user', async (data, callback) => {
@@ -440,6 +432,27 @@ io.on('connection', socket => {
         logger.info('/tweet/public/before')
         callback(await runProcesePerCondition(request))
         break
+      // userが属する全てのルームの取得 // get-users-rooms
+      case '/user/room':
+        logger.info('/user/room')
+        var response = await runProcesePerCondition(request)
+        callback(response)
+        break
+      // get-tweets-in-room
+      case '/room/tweet':
+        logger.info('/room/tweet')
+        var response = await runProcesePerCondition(request)
+        callback(response)
+      // roomに属しているuser
+      case '/room/user':
+        logger.info('/room/user')
+        var response = await runProcesePerCondition(request)
+        callback(response)
+      // roomで呟かれた画像付きツイート全て
+      case '/room/tweet/picture':
+        logger.info('/room/tweet/picture')
+        var response = await runProcesePerCondition(request)
+        callback(response)
     }
   })
 
@@ -499,6 +512,23 @@ async function runProcesePerCondition(request:Request) {
       logger.info("/tweet/public/before")
       var { status, rows, message } = await getTweetInPublicBefore(request.data.user_id, request.data.head_tweet_id);
       return new Response(status, rows, message, request)
+    // ユーザーが属する部屋リスト取得
+    case "/user/room":
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ request.data.user_id ], Message['/sql/user/room'], 'picture')
+      return new Response(status, rows, message, request)
+    case "/room/tweet": // ※送り手と受け手で既読などの取得データが異なる
+      logger.info(request.rest)
+      var { status, rows, message } = await getTweetInSingleRoom(request.data.user_id, request.data.room_id)
+      return new Response(status, rows, message, request)
+    case "/room/user":
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ request.data.room_id ], Message['/sql/room/user'], 'picture')
+      return new Response(status, rows, message, request)
+    case '/room/tweet/picture':
+      logger.info(request.rest)
+      var { status, rows, message } = await getPicTweetInSingleRoom(request.data.user_id, request.data.room_id)
+      return new Response(status, rows, message, request)
     // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
     case "/mail":
       logger.info("/mail")
@@ -557,6 +587,19 @@ async function chat(user:string, room:string, text:string, picture:any, head:str
   // ツイートの取得
   const result = await getSingleTweet(insert[0].id);
   return result
+}
+
+// ここを確認!
+function divideByRoom (objects: Array<Object>, key: string){
+  let rooms = {};
+  for(const obj of objects){
+    if(obj[key] in rooms){
+      rooms[obj[key]].push(obj);
+    }else{
+      rooms[obj[key]] = [obj];
+    }
+  }
+  return rooms;
 }
 
 function generateRandomString(length) {

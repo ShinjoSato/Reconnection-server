@@ -102,6 +102,19 @@ const SQL = {
   
   'select-user-with-pass':
     "SELECT * FROM user_table WHERE id = $1 AND pgp_sym_decrypt(password, 'password') = $2;",
+  
+  '/sql/user/room': // ユーザーが属する部屋のリスト取得
+    `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, A.latest AS latest, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture from chatroom AS A
+    JOIN picture_table AS B ON A.icon = B.id
+    JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
+    WHERE C.user_id = $1
+    ORDER BY A.id;`,
+  
+  '/sql/room/user': // ルームに属するユーザーのリスト取得
+    `SELECT user_table.id AS user_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
+    JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
+    JOIN picture_table ON picture_table.id = user_table.image
+    WHERE user_chatroom_unit.chatroom_id = $1;`
 }
 
 const Message = {
@@ -143,6 +156,10 @@ const Message = {
     { 'true': 'delete from user-room unit by userに成功しました。', 'false': 'delete from user-room unit by userに失敗しました。' },
   'select-user-with-pass':
     { 'true': 'select user with passに成功しました。', 'false': 'select user with passに失敗しました。' },
+  '/sql/user/room': // ユーザーが属する部屋のリスト取得
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/room/user':
+    { 'true':'成功', 'false':'失敗' },
   }
 
 // responseをそのままの形で返すパターン（insert,deleteはほとんどここに分類）
@@ -259,6 +276,7 @@ function getTweetInPublic(user_id: String) {
 }
 
 // getTweetInPublicのSQLと一行しか変わらないのでまとめたい！
+// 最新n件より前の公開ツイートを読み込む
 function getTweetInPublicBefore(user_id: String, head_tweet_id: String) {
   console.log("get tweet in public before.")
   const pool = new Pool(pool_data);
@@ -633,26 +651,6 @@ function selectAllUser(callback: Function){
   })
 }
 
-function selectUsersInRoom(room_id: string){
-  console.log("select users in room.")
-  const pool = new Pool(pool_data);
-  return pool.query(`
-  SELECT user_table.id AS user_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
-  JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
-  JOIN picture_table ON picture_table.id = user_table.image
-  WHERE user_chatroom_unit.chatroom_id = $1;
-  `, [room_id])
-  .then(async (response) => {
-    var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: users };
-  })
-  .catch((error) => {
-    logger.error(error);
-    return { status: false, message: error.detail };
-  })
-}
-
 function selectFriendNotInRoom(room_id: string, user_id: string) {
   console.log("select friend not in room.")
   const pool = new Pool(pool_data);
@@ -795,7 +793,7 @@ async function getSingleRoom(user_id: string, room_id: number){
   const pictweet = await getPicTweetInSingleRoom(user_id, room_id);
   if(!pictweet.status)
     return pictweet;
-  result.single_pictweet = pictweet.data;
+  result.single_pictweet = pictweet.rows;
 
   return result;
 }
@@ -846,10 +844,10 @@ function getTweetInSingleRoom(user_id: String, room_id: number) {
       return tmp;
     });
     pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: tweets };
+    return { status: true, rows: tweets, message: '成功' };
   }).catch((error) => {
     logger.error(error);
-    return { status: false, message: "エラー1" };
+    return { status: false, rows: [], message: "エラー1" };
   })
 }
 
@@ -952,10 +950,10 @@ function getPicTweetInSingleRoom(user_id: String, room_id: number) {
   .then(async (response) => {
     var tweets = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture), user_icon: getImage(row.user_icon) }; });
     pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: tweets };
+    return { status: true, rows: tweets, message:'成功' };
   }).catch((error2) => {
     logger.error(error2);
-    return { status: false, message: "エラー2" };
+    return { status: false, rows:[], message: "エラー2" };
   })
 }
 
@@ -1059,13 +1057,13 @@ function getRoomsUserBelong(user_id: String) {
   `
   return pool.query(sql, [user_id])
   .then((response) => {
-    var rooms = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
+    var rows = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
     pool.end().then(() => console.log('pool has ended'));
-    return rooms;
+    return { status: true, rows, message: '成功' };
   })
   .catch((error) => {
     logger.error(error);
-    return { message: "エラー4" };
+    return { status: false, rows: [], message: "エラー4" };
   })
 }
 
@@ -1139,7 +1137,6 @@ export {
   selectUser,
   selectUsersByPublicity,
   selectAllUser,
-  selectUsersInRoom,
   selectFriendNotInRoom,
   getUserProfileWithPass,
   selectUserWithId,
@@ -1153,6 +1150,7 @@ export {
   getSingleRoom,
   getTweetInSingleRoom,
   getTweetInEachRoom,
+  getPicTweetInSingleRoom,
   getPicTweetInEachRoom,
   getInitialRoom,
   getRoomsUserBelong,
