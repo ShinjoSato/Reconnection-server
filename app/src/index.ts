@@ -6,6 +6,7 @@ const app = express();
 const fs = require('fs')
 const {randomBytes} = require('crypto')
 const nodemailer = require('nodemailer');
+const cron = require('cron')
 
 import {
   SQL,
@@ -684,3 +685,24 @@ async function sendMail(address: string, subject: string, text: string) {
     logger.error(err);
   }
 }
+
+// 今後実装予定のスケジュール実行
+// cronJobsの中身を直接削除するというのは極力控える。
+// スケジュールマスタのような物をPostgreSQL上に用意して、毎分それを読み込んで実行させる仕組みにしたい。
+// 特定の日時一度きり:timestamp, 特定の日一度きり:Date, 固定の時間毎日: Time, 固定の時間等間隔: interval （最小で分単位）
+// {schedule:"timestamp", time:"2022/11/10 12:30:00"}, {schedule:"interval", time:"00:15:00"}, {schedule:"week", time:"0,1,0,1,0,0,0"/* Sunday, Monday, Tuesday, Wednesday, Thrsday, Friday, Saturday */}
+// timeの中身はコードマスタ?を作成して管理させたい。
+// ①DBからジャストタイミングでさせるものを取得・実行
+// const cronJobs:any[] = [];
+// cronJobs.push(
+//   cron.job(
+//     '0 */1 * * * *', // Every minute
+//     () => {
+//       // Put here the code you want to execute every minute
+//       logger.info('This message will be displayed every minute')
+//     },
+//     null,
+//     true
+//   )
+// )
+// logger.info('cronの実行テスト開始')

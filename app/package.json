@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
+    "cron": "^2.1.0",
     "express": "^4.17.1",
     "log4js": "^6.4.7",
     "nodemailer": "^6.7.8",
