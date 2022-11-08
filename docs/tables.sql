@@ -46,6 +46,58 @@ create table tweet (
     primary key(id)
 );
 
+-- ReconnectionのIncoming webhook(REST API)
+-- 登録すると以下のようなAPIが作成される
+-- https://ipアドレス:port番号/rest
+-- Reconnection内で行われる動作のAPI
+-- parameterやdataは外部からの入力
+create table IncomingWebhook (
+    id          integer GENERATED ALWAYS AS IDENTITY,
+    appid       varchar(32) not null, -- ランダムな文字列のキー
+    user_id     varchar(16) not null references user_table(id),
+    createTime  timestamp not null DEFAULT now(),
+    updateTime  timestamp not null DEFAULT now(),
+    UNIQUE(appid),
+    primary key(id)
+);
+
+-- 外部・内部のAPIを管理
+create table RestAPI (
+    id      integer GENERATED ALWAYS AS IDENTITY,
+    method  varchar(8) not null, -- 1:GET, 2:POST, ... 数字文字か文字か
+    url     varchar(256) not null,
+    user_id varchar(16) not null references user_table(id), -- このユーザーがRestAPIを実行兼オーナー
+    createTime timestamp not null DEFAULT now(),
+    updateTime timestamp not null DEFAULT now(),
+    primary key(id)
+);
+
+-- RestAPIに持たせる値
+create table RestAPI_Option (
+    restapi_id integer not null references RestAPI(id),
+    id integer not null,
+    option varchar(64) not null, -- Header, Parameter, Data, Cookie　などのオプションを示す数値か文字
+    keyword varchar(64) not null, -- 複雑なObject(JSON)構造にも対応させたいので、{ data: { status: 'GOOD! } } の時は /data/status とする
+    replacekeyword varchar(64) not null, -- valueがnullの時にRequestパラメータから欲しいデータを取得する。
+    value varchar(128), -- nullの時に値を入力値から取得（とりあえずまずはtextからregexpで抽出したもの）
+    primary key(restapi_id, id)
+);
+
+-- flagはAPIやWebhookでtrue,falseを切り替える
+-- 正規表現に該当するもののAPIを実行させる？
+-- Reconnection内での特定の動作（chatなど）でイベント（内部・外部APIの実行）を実行
+create table OutgoingWebhook (
+    id          integer GENERATED ALWAYS AS IDENTITY,
+    room_id     integer not null references chatroom(id),
+    regexp      varchar(64) not null, -- 正規表現
+    restapi_id  integer not null references RestAPI(id),
+    flag        boolean DEFAULT FALSE, -- trueの時は実行中, falseの時は無反応
+    user_id     varchar(16) not null references user_table(id), -- 
+    createTime  timestamp not null DEFAULT now(),
+    updateTime  timestamp not null DEFAULT now(),
+    primary key(id)
+);
+
 create table user_chatroom_unit (
     user_id     varchar(16) not null references user_table(id),
     chatroom_id integer not null references chatroom(id),
@@ -185,3 +237,18 @@ alter table tweet add column head integer DEFAULT null;
 alter table user_table add column publicity integer not null DEFAULT 1;
 alter table chatroom add column start timestamp not null DEFAULT now();
 alter table chatroom add column latest timestamp not null DEFAULT now();
+
+-- 一時的メモ（内容は必ず削除する）
+
+-- insert into RestAPI(method, url, user_id)
+-- values('POST', 'https://discord.com/api/webhooks/1038729638475743332/emIX1JY5Sun-RsLgCVAt_0dc5oTUFFCLVVC-iUWRoSpmTN25SZbpH7PwpbMJSovddw6u', 'admin');
+
+-- insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, value)
+-- values(1, 1, 'data', '.content', '.data.text', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
+
+-- insert into OutgoingWebhook(room_id, user_id, regexp, restapi_id, flag)
+-- values('164', 'admin', '^discord:(.*)$', 1, TRUE);
+
+-- SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
+-- LEFT JOIN RestAPI AS B on A.restapi_id = B.id
+-- WHERE A.room_id = 164 AND A.flag = TRUE AND 'ABC100' ~ A.regexp;

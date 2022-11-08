@@ -114,7 +114,18 @@ const SQL = {
     `SELECT user_table.id AS user_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, user_chatroom_unit.authority AS authority, user_chatroom_unit.opening AS opening, user_chatroom_unit.posting AS posting FROM user_table
     JOIN user_chatroom_unit ON user_chatroom_unit.user_id = user_table.id
     JOIN picture_table ON picture_table.id = user_table.image
-    WHERE user_chatroom_unit.chatroom_id = $1;`
+    WHERE user_chatroom_unit.chatroom_id = $1;`,
+  
+  '/api/appid/check': // 発行されているAPIであるかの確認
+    `SELECT * FROM IncomingWebhook WHERE appid = $1;`,
+  
+  '/webhook/outgoing/check': //該当する部屋 and 正規表現に当てはまるテキスト and flagがtrue
+    `SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
+    LEFT JOIN RestAPI AS B on A.restapi_id = B.id
+    WHERE A.room_id = $1 AND $2 ~ A.regexp AND A.flag = TRUE;`,
+  
+  '/restapi/id/option': // RestAPIデータに対応するOptionデータのリスト取得
+    `SELECT * FROM RestAPI_Option WHERE restapi_id = $1;`,
 }
 
 const Message = {
@@ -160,6 +171,12 @@ const Message = {
     { 'true':'成功', 'false':'失敗' },
   '/sql/room/user':
     { 'true':'成功', 'false':'失敗' },
+  '/api/appid/check':
+    { 'true':'成功', 'false':'失敗' },
+  '/webhook/outgoing/check':
+    { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/option':
+    { 'true':'成功', 'false':'失敗' },
   }
 
 // responseをそのままの形で返すパターン（insert,deleteはほとんどここに分類）
@@ -175,6 +192,7 @@ function runGeneralSQL(sql: string, data: any[], message: object, toPicture: any
     return { rows: response.rows, status: true, message: message['true'] };
   }).catch((error) => {
     logger.error(error);
+    logger.error(error.detail);
     logger.error(sql)
     logger.error(data)
     return { status: false, message: error.detail };

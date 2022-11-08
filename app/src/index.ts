@@ -7,6 +7,7 @@ const fs = require('fs')
 const {randomBytes} = require('crypto')
 const nodemailer = require('nodemailer');
 const cron = require('cron')
+const axios = require('axios')
 
 import {
   SQL,
@@ -81,7 +82,8 @@ const pool_data = {
   host: 'localhost',
   database: 'postgres',
   password: 'password',
-  port: 5432 //15432
+  port: 5432, //15432
+  keepAlive: true,
 }
 
 // Picture Directory
@@ -364,7 +366,7 @@ io.on('connection', socket => {
       callback({ status, message });
     const room_id = rows[0].room_id;
     callback({message: '既読', status: true, data: { tweet_id: data.tweet_id, room_id, check: 1 }});
-    io.to(room_id).emit('update-tweet-information', { data: rows[0] });
+    io.to(room_id).emit('/socket/client', { rest: '/tweet/update', rows: rows[0] });
 
   })
 
@@ -393,7 +395,8 @@ io.on('connection', socket => {
       // 呟く
       case '/chat':
         logger.info('/chat')
-        callback(await runProcesePerCondition(request));
+        var response = await runProcesePerCondition(request)
+        callback(response);
         break
       // get-tweet-in-public
       case '/tweet/public':
@@ -456,6 +459,7 @@ async function runProcesePerCondition(request:Request) {
   logger.info('runProcesePerCondition');
   logger.info(request);
   const data:{[key: string]: any} = request.data
+  var response:Response;
   switch(request.rest) {
     // 呟き
     case "/chat":
@@ -474,34 +478,41 @@ async function runProcesePerCondition(request:Request) {
           })
         }
       }
-      return new Response(result.status, [], "chat success", request)
+      response = new Response(result.status, [], "chat success", request)
+      break;
     // get-tweet-in-public
     case "/tweet/public":
       logger.info("/tweet/public")
       var { status, rows, message } = await getTweetInPublic(data.user_id);
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     // get-tweet-in-public-before
     case "/tweet/public/before":
       logger.info("/tweet/public/before")
       var { status, rows, message } = await getTweetInPublicBefore(data.user_id, data.head_tweet_id);
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     // ユーザーが属する部屋リスト取得
     case "/user/room":
       logger.info(request.rest)
       var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     case "/room/tweet": // ※送り手と受け手で既読などの取得データが異なる
       logger.info(request.rest)
       var { status, rows, message } = await getTweetInSingleRoom(data.user_id, data.room_id)
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     case "/room/user":
       logger.info(request.rest)
       var { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     case '/room/tweet/picture':
       logger.info(request.rest)
       var { status, rows, message } = await getPicTweetInSingleRoom(data.user_id, data.room_id)
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
     // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
     case "/mail":
       logger.info("/mail")
@@ -519,8 +530,68 @@ async function runProcesePerCondition(request:Request) {
         // 送信完了
         status = true
       }
-      return new Response(status, rows, message, request)
+      response = new Response(status, rows, message, request)
+      break;
+    default:
+      response = new Response(false, [], 'null', request)
   }
+
+  // 正規表現に引っかかったOutgoing Webhookの実行
+  switch(request.rest){
+    case '/chat':
+      var checkOutgoing = await runGeneralSQL(SQL['/webhook/outgoing/check'], [ data.room, data.text ], Message['/webhook/outgoing/check'], null)
+      if(checkOutgoing.rows.length > 0) {
+        // 正規表現に引っかかったOutgoing Webhookを順に実行
+        checkOutgoing.rows.forEach(async (row) => {
+          var options = await runGeneralSQL(SQL['/restapi/id/option'], [ row.restapi_id ], Message['/restapi/id/option'], null)
+          var tmp = {}
+          // Webhookのパラメータ作成
+          for(const option of options.rows) {
+            var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
+            // 呟きを正規表現のフィルターに通してテキストを取得
+            var formattText = text.match(new RegExp(row.regexp))[1]
+            tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), formattText, tmp)
+          }
+          // Outgoing Webhookの実行
+          axios.post(row.url, tmp)
+            .then(res => {
+              logger.info(res.data);
+            }).catch(error => {
+              logger.error(error);
+            }).finally(() => {
+              logger.info('終わり')
+            })
+        })
+      }
+      break;
+    default:
+      break;
+  }
+
+  return response;
+}
+
+/**
+ * Objectの任意の位置に値を代入させる。
+ * @param keys - Objectの目的の位置までの道のりを示すKeyを含む配列
+ * @param value - Objectの目的の位置に入れる値
+ * @param obj - 更新させるObjectデータ
+ * @returns valueが代入されたObjectデータ
+ */
+function pseudoJQ(keys:string[], value:string, obj:object) {
+  const key = keys.shift()
+  return { ...obj, [key]: (keys.length==0)? value : pseudoJQ(keys, value, (obj!=null && key in obj)? obj[key] : null) }
+}
+
+/**
+ * Objectの任意の位置にある値を取得する。
+ * @param keys 目的となる値までの道のりを示すKeyを含む配列
+ * @param obj - 目的となる値を含むObjectデータ
+ * @returns 目的となる値
+ */
+function getValueFromObject(keys:string[], obj:object) {
+  const key = keys.shift()
+  return (keys.length==0)? obj[key] : getValueFromObject(keys, obj[key])
 }
 
 /**
@@ -597,11 +668,16 @@ app.post("/disconnected", function (request, response) {
 // APIを管理する関数
 app.post("/api", async function (req, response) {
   logger.info('/api')
-  logger.info(req)
+  logger.info(req.body)
   response.set({ 'Access-Control-Allow-Origin': '*' });
-  // 今後、API-KEYのようなもので認証させたい。→ appid
   const { rest, data, appid } = req.body
   const request = new Request('/api', rest, data, appid)
+  // APPID認証チェック
+  const checkAppid = await runGeneralSQL(SQL['/api/appid/check'], [ appid ], Message['/api/appid/check'], null)
+  if(checkAppid.rows.length == 0) {
+    return response.json(new Response(false, [], 'APPIDが存在しません。', request))
+  }
+
   switch(rest) {
     // 動作テスト用API
     case '/test':
