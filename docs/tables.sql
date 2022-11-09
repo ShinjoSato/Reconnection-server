@@ -80,6 +80,7 @@ create table RestAPI_Option (
     keyword varchar(64) not null, -- 複雑なObject(JSON)構造にも対応させたいので、{ data: { status: 'GOOD! } } の時は /data/status とする
     replacekeyword varchar(64) not null, -- valueがnullの時にRequestパラメータから欲しいデータを取得する。
     value varchar(128), -- nullの時に値を入力値から取得（とりあえずまずはtextからregexpで抽出したもの）
+    regexpvalue varchar(64), -- valueに対応させた正規表現で、ひっかかった箇所を取得したデータ（テキスト）に入れ替える
     primary key(restapi_id, id)
 );
 
@@ -89,7 +90,7 @@ create table RestAPI_Option (
 create table OutgoingWebhook (
     id          integer GENERATED ALWAYS AS IDENTITY,
     room_id     integer not null references chatroom(id),
-    regexp      varchar(64) not null, -- 正規表現
+    regexp      varchar(64) not null, -- 引っかかったのもを発火させる為の正規表現
     restapi_id  integer not null references RestAPI(id),
     flag        boolean DEFAULT FALSE, -- trueの時は実行中, falseの時は無反応
     user_id     varchar(16) not null references user_table(id), -- 
@@ -243,8 +244,8 @@ alter table chatroom add column latest timestamp not null DEFAULT now();
 -- insert into RestAPI(method, url, user_id)
 -- values('POST', 'https://discord.com/api/webhooks/1038729638475743332/emIX1JY5Sun-RsLgCVAt_0dc5oTUFFCLVVC-iUWRoSpmTN25SZbpH7PwpbMJSovddw6u', 'admin');
 
--- insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, value)
--- values(1, 1, 'data', '.content', '.data.text', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
+-- insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value)
+-- values(1, 1, 'data', '.content', '.data.text', '(テキスト)', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
 
 -- insert into OutgoingWebhook(room_id, user_id, regexp, restapi_id, flag)
 -- values('164', 'admin', '^discord:(.*)$', 1, TRUE);

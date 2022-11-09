@@ -548,9 +548,12 @@ async function runProcesePerCondition(request:Request) {
           // Webhookのパラメータ作成
           for(const option of options.rows) {
             var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
-            // 呟きを正規表現のフィルターに通してテキストを取得
+            // 呟きを正規表現のフィルターに通してテキストを抽出
             var formattText = text.match(new RegExp(row.regexp))[1]
-            tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), formattText, tmp)
+            // 抽出したテキストを用意されたテキストに埋め込む
+            var insertedText = option.value.replace(new RegExp(option.regexpvalue), formattText)
+            // 作成されたテキストをObjectの指定箇所に挿入
+            tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), insertedText, tmp)
           }
           // Outgoing Webhookの実行
           axios.post(row.url, tmp)
