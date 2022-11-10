@@ -242,7 +242,7 @@ alter table chatroom add column latest timestamp not null DEFAULT now();
 -- 一時的メモ（内容は必ず削除する）
 
 -- insert into RestAPI(method, url, user_id)
--- values('POST', 'https://discord.com/api/webhooks/1038729638475743332/emIX1JY5Sun-RsLgCVAt_0dc5oTUFFCLVVC-iUWRoSpmTN25SZbpH7PwpbMJSovddw6u', 'admin');
+-- values('POST', 'https://discord.com/api/webhooks/1038729638475743332/emIX1JY5Sun-RsLgCVAt_0dc5oTUFFCLVVC-iUWRoSpmTN25SZbpH7PwpbMJSovddw6u', 'admin') RETURNING *;
 
 -- insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value)
 -- values(1, 1, 'data', '.content', '.data.text', '(テキスト)', '予め用意されているテキストです。'); -- request.data.textの値を取得したい

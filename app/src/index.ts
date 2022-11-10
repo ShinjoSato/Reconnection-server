@@ -513,6 +513,25 @@ async function runProcesePerCondition(request:Request) {
       var { status, rows, message } = await getPicTweetInSingleRoom(data.user_id, data.room_id)
       response = new Response(status, rows, message, request)
       break;
+    case '/webhook/outgoing/add':
+      logger.info(request.rest)
+      // RestAPIの登録
+      var RestAPI_id:number = -1;
+      var { status, rows, message } = await runGeneralSQL(SQL['/restapi/id/add'], [ data.method, data.url, data.user_id ], Message['/restapi/id/add'], null)
+      if(rows.length>0)
+        RestAPI_id = rows[0]['id']
+      else
+        break;
+      // RestAPI_Optionの登録
+      var keys = getKeysFromObject(data.data)
+      keys.map(async(key, index) => {
+        var value = getValueFromObject(key.split('.').filter(x=>x.length>0), data.data)
+        var replaceKey = getValueFromObject(key.split('.').filter(x=>x.length>0), data.replaceKey)
+        var regexpValue = getValueFromObject(key.split('.').filter(x=>x.length>0), data.regexpValue)
+        var resp = await runGeneralSQL(SQL['/restapi/id/option/add'], [ RestAPI_id, index+1, 'data', key,replaceKey, regexpValue, value ], Message['/restapi/id/option/add'], null)
+      })
+      response = new Response(status, rows, message, request)
+      break
     // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
     case "/mail":
       logger.info("/mail")
@@ -595,6 +614,31 @@ function pseudoJQ(keys:string[], value:string, obj:object) {
 function getValueFromObject(keys:string[], obj:object) {
   const key = keys.shift()
   return (keys.length==0)? obj[key] : getValueFromObject(keys, obj[key])
+}
+
+/**
+ * Objectに含まれるkeyをディレクトリ形式の文字列に変換して取得する。
+ * @param {object} ob 
+ * @returns {string[]} ディレクトリ形式の文字列を含む配列。
+ */
+ function getKeysFromObject(ob:object) {
+  var valuelist:string[] = []
+  Object.keys(ob).map((key) => {
+      const currentDirectory = `.${ key }`
+      switch(typeof(ob[key])) {
+          case "number":
+          case "string":
+              valuelist = [ ...valuelist, `${ currentDirectory }`]
+              break;
+          case "object":
+              if(ob[key] == null)
+                  valuelist = [ ...valuelist, `${ currentDirectory }`]
+              else
+                  valuelist = [ ...valuelist, ...getKeysFromObject(ob[key]).map(x => `${ currentDirectory }${x}`) ]
+              break;
+      }
+  })
+  return valuelist
 }
 
 /**
@@ -690,6 +734,11 @@ app.post("/api", async function (req, response) {
     // 呟く
     case '/chat':
       logger.info('/chat')
+      response.json(await runProcesePerCondition(request))
+      break
+    // Outgoing Webhookの登録
+    case '/webhook/outgoing/add':
+      logger.info('/webhook/outgoing/add')
       response.json(await runProcesePerCondition(request))
       break
     // メール送信

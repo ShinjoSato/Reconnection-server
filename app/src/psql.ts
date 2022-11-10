@@ -124,8 +124,14 @@ const SQL = {
     LEFT JOIN RestAPI AS B on A.restapi_id = B.id
     WHERE A.room_id = $1 AND $2 ~ A.regexp AND A.flag = TRUE;`,
   
+  '/restapi/id/add':// RestAPIを登録
+    `INSERT INTO RestAPI(method, url, user_id) VALUES($1, $2, $3) RETURNING *;`,
+
   '/restapi/id/option': // RestAPIデータに対応するOptionデータのリスト取得
     `SELECT * FROM RestAPI_Option WHERE restapi_id = $1;`,
+  
+  '/restapi/id/option/add': // RestAPI_Optionに追加
+    `INSERT INTO RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value) VALUES($1, $2, $3, $4, $5, $6, $7);`
 }
 
 const Message = {
@@ -175,7 +181,11 @@ const Message = {
     { 'true':'成功', 'false':'失敗' },
   '/webhook/outgoing/check':
     { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/add':
+    { 'true':'成功', 'false':'失敗' },
   '/restapi/id/option':
+    { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/option/add':
     { 'true':'成功', 'false':'失敗' },
   }
 
