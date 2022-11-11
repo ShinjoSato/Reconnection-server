@@ -77,10 +77,23 @@ create table RestAPI_Option (
     restapi_id integer not null references RestAPI(id),
     id integer not null,
     option varchar(64) not null, -- Header, Parameter, Data, Cookie　などのオプションを示す数値か文字
-    keyword varchar(64) not null, -- 複雑なObject(JSON)構造にも対応させたいので、{ data: { status: 'GOOD! } } の時は /data/status とする
-    replacekeyword varchar(64) not null, -- valueがnullの時にRequestパラメータから欲しいデータを取得する。
+    keyword varchar(64) not null, -- 複雑なObject(JSON)構造にも対応させたいので、{ data: { status: 'GOOD! } } の時は .data.status とする
+    replacekeyword varchar(64) not null, -- Requestパラメータから欲しいデータを取得する。
     value varchar(128), -- nullの時に値を入力値から取得（とりあえずまずはtextからregexpで抽出したもの）
     regexpvalue varchar(64), -- valueに対応させた正規表現で、ひっかかった箇所を取得したデータ（テキスト）に入れ替える
+    primary key(restapi_id, id)
+);
+
+-- RestAPIを実行して取得したデータから特定のパラメータを取得
+-- API → Reconnection
+create table RestAPI_Output (
+    restapi_id integer not null references RestAPI(id),
+    id integer not null,
+    room_id integer not null references chatroom(id), -- 呟く部屋のid
+    user_id varchar(16) not null references user_table(id), -- 呟くユーザーのid
+    keyword varchar(64) not null, -- .data.status APIから取得したデータ内の任意のパラメータまでのパス
+    value varchar(128), -- 取得したデータから抽出したパラメータ入れ込むテキスト. 例）取得したデータは「シュトクデータ」です！
+    regexpvalue varchar(64), -- value内のパラメータを挿入したい箇所の正規表現. 例）（シュトクデータ）
     primary key(restapi_id, id)
 );
 
@@ -248,7 +261,10 @@ alter table chatroom add column latest timestamp not null DEFAULT now();
 -- values(1, 1, 'data', '.content', '.data.text', '(テキスト)', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
 
 -- insert into OutgoingWebhook(room_id, user_id, regexp, restapi_id, flag)
--- values('164', 'admin', '^discord:(.*)$', 1, TRUE);
+-- values('164', 'admin', '^discord:(.*)$', 5, TRUE);
+
+insert into RestAPI_Output(restapi_id, id, room_id, user_id, keyword, value, regexpvalue)
+values(5, 1, 164, 'admin', '.status', 'ステータス番号は「status」です！', '(status)');
 
 -- SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
 -- LEFT JOIN RestAPI AS B on A.restapi_id = B.id

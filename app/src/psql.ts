@@ -131,7 +131,10 @@ const SQL = {
     `SELECT * FROM RestAPI_Option WHERE restapi_id = $1;`,
   
   '/restapi/id/option/add': // RestAPI_Optionに追加
-    `INSERT INTO RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value) VALUES($1, $2, $3, $4, $5, $6, $7);`
+    `INSERT INTO RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value) VALUES($1, $2, $3, $4, $5, $6, $7);`,
+
+  '/restapi/id/output/get':
+    `SELECT * FROM RestAPI_Output WHERE restapi_id = $1;`,
 }
 
 const Message = {
@@ -186,6 +189,8 @@ const Message = {
   '/restapi/id/option':
     { 'true':'成功', 'false':'失敗' },
   '/restapi/id/option/add':
+    { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/output/get':
     { 'true':'成功', 'false':'失敗' },
   }
 

@@ -568,16 +568,29 @@ async function runProcesePerCondition(request:Request) {
           for(const option of options.rows) {
             var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
             // 呟きを正規表現のフィルターに通してテキストを抽出
+            logger.warn('以下でエラーが多発！')
+            logger.warn(text.match(new RegExp(row.regexp)))
             var formattText = text.match(new RegExp(row.regexp))[1]
             // 抽出したテキストを用意されたテキストに埋め込む
             var insertedText = option.value.replace(new RegExp(option.regexpvalue), formattText)
             // 作成されたテキストをObjectの指定箇所に挿入
             tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), insertedText, tmp)
           }
-          // Outgoing Webhookの実行
+          // APIの実行
           axios.post(row.url, tmp)
-            .then(res => {
-              logger.info(res.data);
+            .then(async res => {
+              logger.debug(res);
+              // APIから取得したデータを基にした出力（呟く）
+              var outputs = await runGeneralSQL(SQL['/restapi/id/output/get'], [ row.restapi_id ], Message['/restapi/id/output/get'], null);
+              outputs.rows.forEach(async (output) => {
+                // 任意のパラメータ値を取得
+                var param = getValueFromObject(output.keyword.split('.').filter(t => t.length>0), res)
+                // パラメータを用意しているテキストに差し込む
+                var outputText = output.value.replace(new RegExp(output.regexpvalue), param)
+                // 呟く！
+                const outputData = { text:outputText, user:output.user_id, room:output.room_id, head:null, picture:null }
+                await runProcesePerCondition(new Request('/outgoing/output', '/chat', outputData, null))
+              })
             }).catch(error => {
               logger.error(error);
             }).finally(() => {
