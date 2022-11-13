@@ -23,7 +23,6 @@ import {
   createUserRoomWithPicture, 
   removeUserFromRoom,
   getRoomStatus,
-  getRoomStatusForUser,
   deleteRoom,
   selectUser,
   selectUsersByPublicity,
@@ -221,7 +220,9 @@ io.on('connection', socket => {
     }
   })
 
+  // /room/create
   socket.on('create-room', async (data,callback) => {
+    const request = new Request('', '', data, null)
     logger.info(`socket.on:${ "create-room" },\tkeys:${ Object.keys(data) },\troomName:${ data.roomName },\tuserId:${ data.userId }`);
     var path = `./${ picture_directory }/${generateRandomString(12)}.png`
     while(isExisted(path)){
@@ -229,17 +230,17 @@ io.on('connection', socket => {
     }
     const image =(data.picture)? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
     fs.writeFileSync(path, image, 'base64');
-    const result = await createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path, callback);
-    if(!result.status)
-      callback(result)
-    const room = await getRoomStatusForUser(result.data.rows[0].chatroom_id, result.data.rows[0].user_id);
+    var { rows, status, message } = await createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path);
+    if(!status)
+      callback(new Response(status, rows, message, request))
+    const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ rows[0].chatroom_id, rows[0].user_id ], Message['/sql/user/room/status/single'], 'picture')
     callback(room);
-    const newRoom = await getSingleRoom(result.data.rows[0].user_id, result.data.rows[0].chatroom_id);
+    const newRoom = await getSingleRoom(rows[0].user_id, rows[0].chatroom_id);
     [data.userId].forEach((user_id, index) => {
       io.to(`@${user_id}`).emit('receive-signal', { data: newRoom, signal: '002001', status: true });
     })
-    CHATROOMS.push(result.data.rows[0].chatroom_id as string);
-    socket.join(result.data.rows[0].chatroom_id);
+    CHATROOMS.push(rows[0].chatroom_id as string);
+    socket.join(rows[0].chatroom_id);
   });
 
   socket.on('select-all-room', (data, callback) => {
@@ -414,6 +415,10 @@ io.on('connection', socket => {
         var response = await runProcesePerCondition(request)
         callback(response)
         break
+      case '/room/create':
+        logger.info('/room/create')
+        var response = await runProcesePerCondition(request)
+        callback(response)
       // get-tweets-in-room
       case '/room/tweet':
         logger.info('/room/tweet')
@@ -498,6 +503,7 @@ async function runProcesePerCondition(request:Request) {
       var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')
       response = new Response(status, rows, message, request)
       break;
+    // case '/room/create':
     case "/room/tweet": // ※送り手と受け手で既読などの取得データが異なる
       logger.info(request.rest)
       var { status, rows, message } = await getTweetInSingleRoom(data.user_id, data.room_id)
@@ -779,7 +785,7 @@ app.post("/sign-on/check", async function (request, response) {
   }
   const image =(data.picture!=='null')? setImage(data.picture): fs.readFileSync(`./${ picture_directory }/default.jpg`);
   fs.writeFileSync(path, image, 'base64');
-  const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, '練習用のラベル0', path, response);
+  const result = await addUserWithPicture(data.user_id, data.user_name, data.password1, data.mail, data.authority, 1, '練習用のラベル0', path, response);
   logger.info(`result of /sign-on/check:${ result }`);
   const title = fs.readFileSync('./bin/title.txt', 'utf-8');
   const board = fs.readFileSync('./bin/board.txt', 'utf-8');

@@ -92,10 +92,10 @@ const SQL = {
     "INSERT INTO user_chatroom_unit(user_id, chatroom_id, authority, opening, posting) VALUES($1,$2,$3,$4,$5) RETURNING *;",
 
   'delete-from-user-room-unit-by-room':
-    "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1;",
+    "DELETE FROM user_chatroom_unit WHERE chatroom_id=$1 RETURNING *;",
 
   'delete-from-room':
-    "DELETE FROM chatroom WHERE (id)=($1);",
+    "DELETE FROM chatroom WHERE (id)=($1) RETURNING *;",
 
   'delete-from-user-room-unit-by-user':
     "DELETE FROM user_chatroom_unit WHERE (user_id)=($1);",
@@ -108,6 +108,14 @@ const SQL = {
     JOIN picture_table AS B ON A.icon = B.id
     JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
     WHERE C.user_id = $1
+    ORDER BY A.id;`,
+  
+  '/sql/user/room/status/single': // ユーザーが属する任意の部屋に対するステータスリスト取得
+    `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, A.latest AS latest, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture_path, B.path AS picture from chatroom AS A
+    JOIN picture_table AS B ON A.icon = B.id
+    JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
+    WHERE A.id = $1
+    AND C.user_id = $2
     ORDER BY A.id;`,
   
   '/sql/room/user': // ルームに属するユーザーのリスト取得
@@ -177,6 +185,8 @@ const Message = {
   'select-user-with-pass':
     { 'true': 'select user with passに成功しました。', 'false': 'select user with passに失敗しました。' },
   '/sql/user/room': // ユーザーが属する部屋のリスト取得
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/user/room/status/single':
     { 'true':'成功', 'false':'失敗' },
   '/sql/room/user':
     { 'true':'成功', 'false':'失敗' },
@@ -369,7 +379,7 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
   });
 }
 
-async function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string, callback: Function){
+async function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string){
   console.log("create user-room with picture.")
   const  { rows, status } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
   if(status){
@@ -471,13 +481,13 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
  * @param picture_path 画像までのディレクトリーパス。
  * @param response 結果を返信する関数。
  */
-async function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, picture_label: string, picture_path: string, response: any){
+async function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, user_publicity: number, picture_label: string, picture_path: string, response: any){
     console.log("add user with picture.");
     const pool = new Pool(pool_data);
     const { rows, status, message } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
     if(!status)
       return { rows, status, message };
-    const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['insert-into-user'], [ user_id, user_name, user_password, rows[0].id, user_mail, user_authority ], Message['insert-into-user'], null)
+    const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['insert-into-user'], [ user_id, user_name, user_password, rows[0].id, user_mail, user_authority, user_publicity ], Message['insert-into-user'], null)
     if(!userStatus){
       console.log(runGeneralSQL(SQL['delete-from-picture'], [ rows[0].id ], Message['delete-from-picture'], null));
       return { 'rows':userRows, 'status':userStatus, 'message':userMessage }
@@ -548,15 +558,15 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
   pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then(async (res) => {
     if(res.rows.length==1){
-        const room = await getRoomStatusForUser(id, user_id);
+        const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ id, user_id ], Message['/sql/user/room/status/single'], 'picture')
         if(!room.status)
           callback(room);
         console.log(room);
-        console.log(room.data);
+        console.log(room.rows);
         if(picture)
-          saveImage(room.data[0].picture_path, picture);
+          saveImage(room.rows[0].picture_path, picture);
         pool.end().then(() => console.log('pool has ended'));
-        callback({message: 'update room success!', status: true, data: room.data, id })
+        callback({message: 'update room success!', status: true, data: room.rows, id })
     }else{
       callback({message: "error update room", status: false});
     }
@@ -600,28 +610,8 @@ function getRoomStatus(id: number) {
   })
 }
 
-function getRoomStatusForUser(room_id: number, user_id: string) {
-  console.log("get room status for user.");
-  const pool = new Pool(pool_data);
-  const sql = `SELECT A.id AS id, A.name AS name, A.openLevel AS open_level, A.postLevel AS post_level, A.latest AS latest, C.authority AS authority, C.opening AS opening, C.posting AS posting, B.path AS picture_path, B.path AS picture from chatroom AS A
-  JOIN picture_table AS B ON A.icon = B.id
-  JOIN user_chatroom_unit AS C ON C.chatroom_id = A.id
-  WHERE A.id = $1
-  AND C.user_id = $2
-  ORDER BY A.id;`;
-  return pool.query(sql, [room_id, user_id]).then(async (response) => {
-    const room = (response.rows).map((row) => { return {...row, picture: getImage(row.picture)} });
-    pool.end().then(() => console.log('pool has ended'));
-    return { data: room, status: true };
-  }).catch((error) => {
-    logger.error(error);
-    return { message: "エラーが生じました。", status: false };
-  })
-}
-
 async function deleteRoom(room_id: number){
   console.log("delete room.")
-  const pool = new Pool(pool_data);
   const del_unit = await runGeneralSQL(SQL['delete-from-user-room-unit-by-room'], [ room_id ], Message['delete-from-user-room-unit-by-room'], null)
   if(!del_unit.status)
     return del_unit;
@@ -808,20 +798,20 @@ async function getSingleRoom(user_id: string, room_id: number){
   console.log("get single room")
   let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
 
-  const room = await getRoomStatusForUser(room_id, user_id);
+  const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ room_id, user_id ], Message['/sql/user/room/status/single'], 'picture')
   if(!room.status)
     return room;
-  result.single_room = room.data;
+  result.single_room = room.rows;
 
-  const member = await getMemberInRoom(room_id);
+  const member = await runGeneralSQL(SQL['/sql/room/user'], [ room_id ], Message['/sql/room/user'], 'picture')
   if(!member.status)
     return member;
-  result.single_roommember = member.data;
+  result.single_roommember = member.rows;
 
   const tweet = await getTweetInSingleRoom(user_id, room_id);
   if(!tweet.status)
     return tweet;
-  result.single_tweet = tweet.data;
+  result.single_tweet = tweet.rows;
 
   const pictweet = await getPicTweetInSingleRoom(user_id, room_id);
   if(!pictweet.status)
@@ -984,26 +974,6 @@ function getRoomsUserBelong(user_id: String) {
   })
 }
 
-
-function getMemberInRoom(room_id: number) {
-  console.log("get member in room.")
-  const pool = new Pool(pool_data);
-  const sql = `SELECT user_table.id AS user_id, B.chatroom_id AS room_id, user_table.name AS user_name, user_table.publicity AS publicity, picture_table.path AS picture, B.authority AS authority, B.opening AS opening, B.posting AS posting FROM user_table
-  JOIN user_chatroom_unit AS B ON B.user_id = user_table.id
-  JOIN picture_table ON picture_table.id = user_table.image
-  WHERE B.chatroom_id = $1;`;
-  return pool.query(sql, [room_id])
-  .then((response) => {
-    var users = (response.rows).map((row) => { return { ...row, picture: getImage(row.picture) }; });
-    pool.end().then(() => console.log('pool has ended'));
-    return { status: true, data: users };
-  })
-  .catch((error) => {
-    logger.error(error);
-    return { status: false, message: "エラー5" };
-  })
-}
-
 /**
  * ユーザーが属する部屋毎のユーザーリストを取得。
  * @param user_id 
@@ -1049,7 +1019,6 @@ export {
   addUserWithPicture,
   createUserRoomWithPicture,
   getRoomStatus,
-  getRoomStatusForUser,
   deleteRoom,
   selectUser,
   selectUsersByPublicity,
