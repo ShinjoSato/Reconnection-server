@@ -112,6 +112,30 @@ create table OutgoingWebhook (
     primary key(id)
 );
 
+-- cronのcommandを模倣
+-- * * * * *
+create table RestAPI_Schedule (
+    restapi_id integer not null references RestAPI(id),
+    id integer not null,
+    room_id integer not null references chatroom(id),
+    text varchar(512) not null,
+    flag boolean DEFAULT FALSE,
+    minute varchar(4) not null DEFAULT '*', -- 分 0-59
+    hour varchar(4) not null DEFAULT '*', -- 時 0-23
+    day varchar(4) not null DEFAULT '*', -- 日 1-31
+    month varchar(4) not null DEFAULT '*', -- 月 1-12
+    date varchar(4) not null DEFAULT '*', -- 曜日 0-7 (0と7は日曜日)
+    executeTime timestamp not null DEFAULT now(), -- 最後に実行された時間
+    createTime timestamp not null DEFAULT now(),
+    updateTIme timestamp not null DEFAULT now(),
+    primary key(restapi_id, id)
+);
+-- insert into RestAPI_Schedule(restapi_id, id, room_id, minute, hour, day, month, date)
+-- values(5, 1, 1, '*', '*', '*', '*', '*');
+
+-- insert into RestAPI_Schedule(restapi_id, id, room_id, text, minute, hour, day, month, date)
+-- values(5, 1, 1, 'discord:スケジュール実行', '*/3', '*', '*', '*', '*');
+
 create table user_chatroom_unit (
     user_id     varchar(16) not null references user_table(id),
     chatroom_id integer not null references chatroom(id),

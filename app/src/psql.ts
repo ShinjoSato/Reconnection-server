@@ -127,6 +127,19 @@ const SQL = {
   '/api/appid/check': // 発行されているAPIであるかの確認
     `SELECT * FROM IncomingWebhook WHERE appid = $1;`,
   
+  '/sql/user/webhook':
+    `SELECT * FROM RestAPI WHERE user_id = $1;`,
+  
+  '/sql/webhook/outgoing/id/option':
+    `SELECT API.id, API.method, Option.id AS option_id, Option.keyword, Option.replacekeyword, Option.value, Option.regexpvalue FROM RestAPI AS API
+    JOIN RestAPI_Option AS Option ON API.id = Option.restapi_id
+    WHERE API.id = $1;`,
+  
+  '/sql/webhook/outgoing/id/output':
+    `SELECT API.id, API.method, Output.id AS output_id, Output.room_id, Output.user_id AS user_id, Output.keyword, Output.value, Output.regexpvalue FROM RestAPI AS API
+    JOIN RestAPI_Output AS Output ON API.id = Output.restapi_id
+    WHERE API.id = $1;`,
+  
   '/webhook/outgoing/check': //該当する部屋 and 正規表現に当てはまるテキスト and flagがtrue
     `SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
     LEFT JOIN RestAPI AS B on A.restapi_id = B.id
@@ -143,6 +156,28 @@ const SQL = {
 
   '/restapi/id/output/get':
     `SELECT * FROM RestAPI_Output WHERE restapi_id = $1;`,
+  
+  '/sql/schedule/get': //スケジュール実行するRestAPIのidを取得
+    `SELECT RestAPI.*, RestAPI_Schedule.id AS schedule_id, RestAPI_Schedule.text FROM RestAPI_Schedule
+    JOIN RestAPI ON RestAPI_Schedule.restapi_id = RestAPI.id
+    WHERE (minute='*'
+    OR (minute ~ '\\*\\/\\d+' AND date_part('minute', now() - executeTime)>= CAST(substring(minute, '\\*\\/(\\d+)') AS integer))
+    OR (length(substring(minute, '\\d+'))>0 AND CAST(substring(minute, '\\d+') AS integer) = CAST(date_part('minute', now()) AS integer)))
+    AND (hour='*'
+    OR (hour ~ '\\*\\/\\d+' AND date_part('hour', now()-executeTime) >= CAST(substring(hour, '\\*\\/(\\d+)') AS integer))
+    OR (length(substring(hour, '\\d+'))>0 AND CAST(substring(hour, '\\d+') AS integer) = CAST(date_part('hour', now()) AS integer)))
+    AND (day='*'
+    OR (day ~ '\\*\\/\\d+' AND date_part('day', now()-executeTime) >= CAST(substring(day, '\\*\\/(\\d+)') AS integer))
+    OR (length(substring(day, '\\d+'))>0 AND CAST(substring(day, '\\d+') AS integer) = CAST(date_part('day', now()) AS integer)))
+    AND (month='*'
+    OR (month ~ '\\*\\/\\d+' AND date_part('month', now()-executeTime) >= CAST(substring(month, '\\*\\/(\\d+)') AS integer))
+    OR (length(substring(month, '\\d+'))>0 AND CAST(substring(month, '\\d+') AS integer) = CAST(date_part('month', now()) AS integer)))
+    AND (day='*'
+    OR (day ~ '\\*\\/\\d+' AND date_part('dow', now()-executeTime) >= CAST(substring(date, '\\*\\/(\\d+)') AS integer))
+    OR (length(substring(date, '\\d+'))>0 AND CAST(substring(date, '\\d+') AS integer) = CAST(date_part('dow', now()) AS integer)));`,
+
+  '/sql/schedule/executetime/update':
+    `UPDATE RestAPI_Schedule SET executeTime = now() WHERE restapi_id=$1 AND id=$2 RETURNING *;`,
 }
 
 const Message = {
@@ -192,6 +227,12 @@ const Message = {
     { 'true':'成功', 'false':'失敗' },
   '/api/appid/check':
     { 'true':'成功', 'false':'失敗' },
+  '/sql/user/webhook':
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/webhook/outgoing/id/option':
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/webhook/outgoing/id/output':
+    { 'true':'成功', 'false':'失敗' },
   '/webhook/outgoing/check':
     { 'true':'成功', 'false':'失敗' },
   '/restapi/id/add':
@@ -201,6 +242,10 @@ const Message = {
   '/restapi/id/option/add':
     { 'true':'成功', 'false':'失敗' },
   '/restapi/id/output/get':
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/schedule/get':
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/schedule/executetime/update':
     { 'true':'成功', 'false':'失敗' },
   }
 

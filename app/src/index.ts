@@ -434,6 +434,15 @@ io.on('connection', socket => {
         logger.info('/room/tweet/picture')
         var response = await runProcesePerCondition(request)
         callback(response)
+      case '/user/webhook':
+        var response = await runProcesePerCondition(request)
+        callback(response)
+      case '/webhook/id/option':
+        var response = await runProcesePerCondition(request)
+        callback(response)
+      case '/webhook/id/output':
+        var response = await runProcesePerCondition(request)
+        callback(response)
     }
   })
 
@@ -519,6 +528,58 @@ async function runProcesePerCondition(request:Request) {
       var { status, rows, message } = await getPicTweetInSingleRoom(data.user_id, data.room_id)
       response = new Response(status, rows, message, request)
       break;
+    case '/user/webhook':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/webhook'], [ data.user_id ], Message['/sql/user/webhook'], null)
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/option':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/webhook/outgoing/id/output'], [ data.api_id ], Message['/sql/webhook/outgoing/id/output'], null)
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/output':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL(SQL['/sql/webhook/outgoing/id/output'], [ data.api_id ], Message['/sql/webhook/outgoing/id/output'], null)
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/execute':
+      var options = await runGeneralSQL(SQL['/restapi/id/option'], [ data.restapi_id ], Message['/restapi/id/option'], null)
+      var tmp = {}
+      // Webhookのパラメータ作成
+      for(const option of options.rows) {
+        var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
+        // // 呟きを正規表現のフィルターに通してテキストを抽出
+        // logger.warn('以下でエラーが多発！')
+        // logger.warn(text.match(new RegExp(data.regexp)))
+        // var formattText = text.match(new RegExp(data.regexp))[1] // ←ここをどうするか
+        // // 抽出したテキストを用意されたテキストに埋め込む
+        // var insertedText = option.value.replace(new RegExp(option.regexpvalue), formattText)
+        // 作成されたテキストをObjectの指定箇所に挿入
+
+        // 下のテキストを自動で入れられるようにしたらクリア！
+        tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), text, tmp)
+      }
+      // APIの実行
+      await axios.post(data.url, tmp)
+      .then(async res => {
+        // APIから取得したデータを基にした出力（呟く）
+        var { status, rows, message } = await runGeneralSQL(SQL['/restapi/id/output/get'], [ data.restapi_id ], Message['/restapi/id/output/get'], null);
+        rows.forEach(async (output) => {
+          // 任意のパラメータ値を取得
+          var param = getValueFromObject(output.keyword.split('.').filter(t => t.length>0), res)
+          // パラメータを用意しているテキストに差し込む
+          var outputText = output.value.replace(new RegExp(output.regexpvalue), param)
+          // 呟く！
+          const outputData = { text:outputText, user:output.user_id, room:output.room_id, head:null, picture:null }
+          await runProcesePerCondition(new Request('/outgoing/output', '/chat', outputData, null))
+        })
+        response = new Response(status, rows, message, request)
+      }).catch(error => {
+        logger.error(error);
+        response = new Response(false, [], message, request)
+      }).finally(() => {})
+      break
     case '/webhook/outgoing/add':
       logger.info(request.rest)
       // RestAPIの登録
@@ -568,6 +629,7 @@ async function runProcesePerCondition(request:Request) {
       if(checkOutgoing.rows.length > 0) {
         // 正規表現に引っかかったOutgoing Webhookを順に実行
         checkOutgoing.rows.forEach(async (row) => {
+          // いずれは '/webhook/id/execute' と統一させたい!
           var options = await runGeneralSQL(SQL['/restapi/id/option'], [ row.restapi_id ], Message['/restapi/id/option'], null)
           var tmp = {}
           // Webhookのパラメータ作成
@@ -842,14 +904,22 @@ async function sendMail(address: string, subject: string, text: string) {
 // ①DBからジャストタイミングでさせるものを取得・実行
 // const cronJobs:any[] = [];
 // cronJobs.push(
-//   cron.job(
-//     '0 */1 * * * *', // Every minute
-//     () => {
-//       // Put here the code you want to execute every minute
-//       logger.info('This message will be displayed every minute')
-//     },
-//     null,
-//     true
-//   )
+cron.job(
+  '0 */1 * * * *', // Every minute
+  async () => {
+    logger.info('Schedule実行開始')
+    var { status, rows, message } = await runGeneralSQL(SQL['/sql/schedule/get'], [], Message['/sql/schedule/get'], null)
+    rows.map(async (row) => {
+      const request = new Request('/schedule', '/webhook/id/execute', { url:row.url, restapi_id:row.id, text:row.text }, null)
+      const response = await runProcesePerCondition(request)
+      if(response.status == true) {
+        await runGeneralSQL(SQL['/sql/schedule/executetime/update'], [ row.id, row.schedule_id ], Message['/sql/schedule/executetime/update'], null)
+        logger.info('schedule successfully and update "executeTime"!')
+      }
+    })
+  },
+  null,
+  true
+)
 // )
 // logger.info('cronの実行テスト開始')
