@@ -773,7 +773,7 @@ app.post("/api", async function (req, response) {
   const { rest, data, appid } = req.body
   const request = new Request('/api', rest, data, appid)
   // APPID認証チェック
-  const checkAppid = await runGeneralSQL(SQL['/api/appid/check'], [ appid ], Message['/api/appid/check'], null)
+  const checkAppid = await runGeneralSQL(SQL['/api/appid/check'], [ appid, rest ], Message['/api/appid/check'], null)
   if(checkAppid.rows.length == 0) {
     return response.json(new Response(false, [], 'APPIDが存在しません。', request))
   }

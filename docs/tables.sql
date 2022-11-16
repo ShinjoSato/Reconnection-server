@@ -51,7 +51,7 @@ create table tweet (
 -- https://ipアドレス:port番号/rest
 -- Reconnection内で行われる動作のAPI
 -- parameterやdataは外部からの入力
-create table IncomingWebhook (
+create table Authority (
     id          integer GENERATED ALWAYS AS IDENTITY,
     appid       varchar(32) not null, -- ランダムな文字列のキー
     user_id     varchar(16) not null references user_table(id),
@@ -59,6 +59,14 @@ create table IncomingWebhook (
     updateTime  timestamp not null DEFAULT now(),
     UNIQUE(appid),
     primary key(id)
+);
+
+create table Authority_Option (
+    authority_id INTEGER NOT NULL references Authority(id),
+    id INTEGER NOT NULL,
+    rest VARCHAR(64) NOT NULL,
+    createTime timestamp NOT NULL DEFAULT now(),
+    primary key(authority_id, id)
 );
 
 -- 外部・内部のAPIを管理

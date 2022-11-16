@@ -125,7 +125,9 @@ const SQL = {
     WHERE user_chatroom_unit.chatroom_id = $1;`,
   
   '/api/appid/check': // 発行されているAPIであるかの確認
-    `SELECT * FROM IncomingWebhook WHERE appid = $1;`,
+    `SELECT Authority.*, Option.rest FROM Authority
+    JOIN Authority_Option AS Option ON Authority.id = Option.authority_id
+    WHERE Authority.appid = $1 AND Option.rest = $2;`,
   
   '/sql/user/webhook':
     `SELECT * FROM RestAPI WHERE user_id = $1;`,
