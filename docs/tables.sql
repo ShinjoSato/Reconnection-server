@@ -78,9 +78,9 @@ create table RestAPI_Option (
     id integer not null,
     option varchar(64) not null, -- Header, Parameter, Data, Cookie　などのオプションを示す数値か文字
     keyword varchar(64) not null, -- 複雑なObject(JSON)構造にも対応させたいので、{ data: { status: 'GOOD! } } の時は .data.status とする
-    replacekeyword varchar(64) not null, -- Requestパラメータから欲しいデータを取得する。
-    value varchar(128), -- nullの時に値を入力値から取得（とりあえずまずはtextからregexpで抽出したもの）
-    regexpvalue varchar(64), -- valueに対応させた正規表現で、ひっかかった箇所を取得したデータ（テキスト）に入れ替える
+    replacekeyword varchar(64), --存在する場合はrequest変数内からデータを取得 -- Requestパラメータから欲しいデータを取得する。
+    value varchar(128) not null, -- replacekeywordがnullの時はvalueそのまま、replacekeywordに値があるときはvalueは正規表現を含むテンプレート文の役割 -- nullの時に値を入力値から取得（とりあえずまずはtextからregexpで抽出したもの）
+    regexpvalue varchar(64), -- replacekeywordがnullの時はこのデータもnullにさせる -- valueに対応させた正規表現で、ひっかかった箇所を取得したデータ（テキスト）に入れ替える
     primary key(restapi_id, id)
 );
 
@@ -282,7 +282,7 @@ alter table chatroom add column latest timestamp not null DEFAULT now();
 -- values('POST', 'https://discord.com/api/webhooks/1038729638475743332/emIX1JY5Sun-RsLgCVAt_0dc5oTUFFCLVVC-iUWRoSpmTN25SZbpH7PwpbMJSovddw6u', 'admin') RETURNING *;
 
 -- insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value)
--- values(1, 1, 'data', '.content', '.data.text', '(テキスト)', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
+-- values(5, 1, 'data', '.content', '.data.text', '(テキスト)', '予め用意されているテキストです。'); -- request.data.textの値を取得したい
 
 -- insert into OutgoingWebhook(room_id, user_id, regexp, restapi_id, flag)
 -- values('164', 'admin', '^discord:(.*)$', 5, TRUE);

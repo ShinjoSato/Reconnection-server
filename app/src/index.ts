@@ -548,17 +548,17 @@ async function runProcesePerCondition(request:Request) {
       var tmp = {}
       // Webhookのパラメータ作成
       for(const option of options.rows) {
-        var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
-        // // 呟きを正規表現のフィルターに通してテキストを抽出
-        // logger.warn('以下でエラーが多発！')
-        // logger.warn(text.match(new RegExp(data.regexp)))
-        // var formattText = text.match(new RegExp(data.regexp))[1] // ←ここをどうするか
-        // // 抽出したテキストを用意されたテキストに埋め込む
-        // var insertedText = option.value.replace(new RegExp(option.regexpvalue), formattText)
-        // 作成されたテキストをObjectの指定箇所に挿入
-
-        // 下のテキストを自動で入れられるようにしたらクリア！
-        tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), text, tmp)
+        var outputText = ''
+          if(option.replacekeyword==null) {
+            // RestAPI_Option.valueをそのまま使用
+            outputText = option.value
+          } else {
+            // Request内の指定のデータを取得し、RestAPI_Option.valueの正規表現箇所と置換
+            var planeText = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
+            outputText =  option.value.replace(new RegExp(option.regexpvalue), planeText)
+          }
+          // 作成されたテキストをObjectの指定箇所に挿入
+          tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), outputText, tmp)
       }
       // APIの実行
       await axios.post(data.url, tmp)
@@ -629,41 +629,13 @@ async function runProcesePerCondition(request:Request) {
       if(checkOutgoing.rows.length > 0) {
         // 正規表現に引っかかったOutgoing Webhookを順に実行
         checkOutgoing.rows.forEach(async (row) => {
-          // いずれは '/webhook/id/execute' と統一させたい!
-          var options = await runGeneralSQL(SQL['/restapi/id/option'], [ row.restapi_id ], Message['/restapi/id/option'], null)
-          var tmp = {}
-          // Webhookのパラメータ作成
-          for(const option of options.rows) {
-            var text = getValueFromObject(option.replacekeyword.split('.').filter(t => t.length>0), request)
-            // 呟きを正規表現のフィルターに通してテキストを抽出
-            logger.warn('以下でエラーが多発！')
-            logger.warn(text.match(new RegExp(row.regexp)))
-            var formattText = text.match(new RegExp(row.regexp))[1]
-            // 抽出したテキストを用意されたテキストに埋め込む
-            var insertedText = option.value.replace(new RegExp(option.regexpvalue), formattText)
-            // 作成されたテキストをObjectの指定箇所に挿入
-            tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), insertedText, tmp)
-          }
-          // APIの実行
-          axios.post(row.url, tmp)
-            .then(async res => {
-              logger.debug(res);
-              // APIから取得したデータを基にした出力（呟く）
-              var outputs = await runGeneralSQL(SQL['/restapi/id/output/get'], [ row.restapi_id ], Message['/restapi/id/output/get'], null);
-              outputs.rows.forEach(async (output) => {
-                // 任意のパラメータ値を取得
-                var param = getValueFromObject(output.keyword.split('.').filter(t => t.length>0), res)
-                // パラメータを用意しているテキストに差し込む
-                var outputText = output.value.replace(new RegExp(output.regexpvalue), param)
-                // 呟く！
-                const outputData = { text:outputText, user:output.user_id, room:output.room_id, head:null, picture:null }
-                await runProcesePerCondition(new Request('/outgoing/output', '/chat', outputData, null))
-              })
-            }).catch(error => {
-              logger.error(error);
-            }).finally(() => {
-              logger.info('終わり')
-            })
+          // APIの実行に必要となるデータを追加
+          request.data.text = row.value
+          request.data.restapi_id = row.restapi_id
+          request.data.url = row.url
+          // APIを実行
+          const subRequest = new Request('/webhook', '/webhook/id/execute', request.data, null)
+          const subResponse = await runProcesePerCondition(subRequest)
         })
       }
       break;

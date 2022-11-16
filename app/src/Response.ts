@@ -2,7 +2,7 @@
 export interface RequestInterface {
     url: string; // /socket/server, /socket/client or /api
     rest: string; // /.../... 
-    data: object|null;
+    data: { [key: string]:any }|null;
     appid: string|null; // socket通信時はnull, REST API時は必須
 }
 
@@ -10,7 +10,7 @@ export class Request implements RequestInterface {
     constructor (
         public url: string,
         public rest: string,
-        public data: object|null,
+        public data: { [key: string]:any }|null,
         public appid: string|null,
     ) {}
 }

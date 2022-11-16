@@ -141,7 +141,7 @@ const SQL = {
     WHERE API.id = $1;`,
   
   '/webhook/outgoing/check': //該当する部屋 and 正規表現に当てはまるテキスト and flagがtrue
-    `SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
+    `SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id, substring($2, A.regexp) AS value FROM OutgoingWebhook AS A
     LEFT JOIN RestAPI AS B on A.restapi_id = B.id
     WHERE A.room_id = $1 AND $2 ~ A.regexp AND A.flag = TRUE;`,
   
