@@ -160,9 +160,11 @@ const SQL = {
     `SELECT * FROM RestAPI_Output WHERE restapi_id = $1;`,
   
   '/sql/schedule/get': //スケジュール実行するRestAPIのidを取得
-    `SELECT RestAPI.*, RestAPI_Schedule.id AS schedule_id, RestAPI_Schedule.text FROM RestAPI_Schedule
-    JOIN RestAPI ON RestAPI_Schedule.restapi_id = RestAPI.id
-    WHERE (minute='*'
+    `SELECT RestAPI.*, Scheduler.id AS schedule_id, Scheduler.text FROM Scheduler
+    JOIN RestAPI ON Scheduler.restapi_id = RestAPI.id
+    WHERE
+    Scheduler.flag = TRUE
+    AND (minute='*'
     OR (minute ~ '\\*\\/\\d+' AND date_part('minute', now() - executeTime)>= CAST(substring(minute, '\\*\\/(\\d+)') AS integer))
     OR (length(substring(minute, '\\d+'))>0 AND CAST(substring(minute, '\\d+') AS integer) = CAST(date_part('minute', now()) AS integer)))
     AND (hour='*'
@@ -179,7 +181,7 @@ const SQL = {
     OR (length(substring(date, '\\d+'))>0 AND CAST(substring(date, '\\d+') AS integer) = CAST(date_part('dow', now()) AS integer)));`,
 
   '/sql/schedule/executetime/update':
-    `UPDATE RestAPI_Schedule SET executeTime = now() WHERE restapi_id=$1 AND id=$2 RETURNING *;`,
+    `UPDATE Scheduler SET executeTime = now() WHERE restapi_id=$1 AND id=$2 RETURNING *;`,
 }
 
 const Message = {

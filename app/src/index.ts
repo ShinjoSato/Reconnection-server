@@ -393,56 +393,21 @@ io.on('connection', socket => {
         socket.join(`@${UserID}`);//@user id.
         callback({rows: rooms.data});
         break
-      // 呟く
-      case '/chat':
-        logger.info('/chat')
+      case '/chat': // 呟く
+      case '/tweet/public': // get-tweet-in-public
+      case '/tweet/public/before': // get-tweet-in-public-before
+      case '/user/room': // userが属する全てのルームの取得 // get-users-rooms
+      case '/room/create':
+      case '/room/tweet': // get-tweets-in-room
+      case '/room/user': // roomに属しているuser
+      case '/room/tweet/picture': // roomで呟かれた画像付きツイート全て
+      case '/user/webhook':
+      case '/webhook/id/option':
+      case '/webhook/id/output':
+        logger.info(rest)
         var response = await runProcesePerCondition(request)
         callback(response);
         break
-      // get-tweet-in-public
-      case '/tweet/public':
-        logger.info('/tweet/public')
-        callback(await runProcesePerCondition(request))
-        break
-      // get-tweet-in-public-before
-      case '/tweet/public/before':
-        logger.info('/tweet/public/before')
-        callback(await runProcesePerCondition(request))
-        break
-      // userが属する全てのルームの取得 // get-users-rooms
-      case '/user/room':
-        logger.info('/user/room')
-        var response = await runProcesePerCondition(request)
-        callback(response)
-        break
-      case '/room/create':
-        logger.info('/room/create')
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      // get-tweets-in-room
-      case '/room/tweet':
-        logger.info('/room/tweet')
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      // roomに属しているuser
-      case '/room/user':
-        logger.info('/room/user')
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      // roomで呟かれた画像付きツイート全て
-      case '/room/tweet/picture':
-        logger.info('/room/tweet/picture')
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      case '/user/webhook':
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      case '/webhook/id/option':
-        var response = await runProcesePerCondition(request)
-        callback(response)
-      case '/webhook/id/output':
-        var response = await runProcesePerCondition(request)
-        callback(response)
     }
   })
 
@@ -879,7 +844,7 @@ async function sendMail(address: string, subject: string, text: string) {
 cron.job(
   '0 */1 * * * *', // Every minute
   async () => {
-    logger.info('Schedule実行開始')
+    logger.info('Schedule実行開始時刻:', new Date(Date.now()))
     var { status, rows, message } = await runGeneralSQL(SQL['/sql/schedule/get'], [], Message['/sql/schedule/get'], null)
     rows.map(async (row) => {
       const request = new Request('/schedule', '/webhook/id/execute', { url:row.url, restapi_id:row.id, text:row.text }, null)
