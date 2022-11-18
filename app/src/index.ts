@@ -844,13 +844,16 @@ async function sendMail(address: string, subject: string, text: string) {
 cron.job(
   '0 */1 * * * *', // Every minute
   async () => {
-    logger.info('Schedule実行開始時刻:', new Date(Date.now()))
+    const currentTime = new Date(Date.now())
+    // TimeZoneを日本時間に修正
+    currentTime.setHours(currentTime.getHours() + 9)
+    logger.info('Schedule実行開始時刻:', currentTime)
     var { status, rows, message } = await runGeneralSQL(SQL['/sql/schedule/get'], [], Message['/sql/schedule/get'], null)
     rows.map(async (row) => {
       const request = new Request('/schedule', '/webhook/id/execute', { url:row.url, restapi_id:row.id, text:row.text }, null)
       const response = await runProcesePerCondition(request)
       if(response.status == true) {
-        await runGeneralSQL(SQL['/sql/schedule/executetime/update'], [ row.id, row.schedule_id ], Message['/sql/schedule/executetime/update'], null)
+        await runGeneralSQL(SQL['/sql/schedule/executetime/update'], [ currentTime.toISOString(), row.id, row.schedule_id ], Message['/sql/schedule/executetime/update'], null)
         logger.info('schedule successfully and update "executeTime"!')
       }
     })

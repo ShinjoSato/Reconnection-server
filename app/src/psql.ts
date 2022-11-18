@@ -181,7 +181,7 @@ const SQL = {
     OR (length(substring(date, '\\d+'))>0 AND CAST(substring(date, '\\d+') AS integer) = CAST(date_part('dow', now()) AS integer)));`,
 
   '/sql/schedule/executetime/update':
-    `UPDATE Scheduler SET executeTime = now() WHERE restapi_id=$1 AND id=$2 RETURNING *;`,
+    `UPDATE Scheduler SET executeTime = $1 WHERE restapi_id=$2 AND id=$3 RETURNING *;`,
 }
 
 const Message = {
