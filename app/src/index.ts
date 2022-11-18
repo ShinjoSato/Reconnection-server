@@ -10,8 +10,6 @@ const cron = require('cron')
 const axios = require('axios')
 
 import {
-  SQL,
-  Message,
   runGeneralSQL,
   getSingleTweet,
   getCommonTweetsInRoom,
@@ -163,7 +161,7 @@ io.on('connection', socket => {
 
   socket.on('receive-room-member', async (data, callback) => {
     console.log("receive room member.");
-    const { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ data.id ], Message['/sql/room/user'], 'picture')
+    const { status, rows, message } = await runGeneralSQL('/sql/room/user', [ data.id ], 'picture')
     if(!status)
       callback({ status, rows, message });
     callback({ rows });
@@ -188,7 +186,7 @@ io.on('connection', socket => {
     logger.info(`socket.on:${ "add-user-into-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
     let result = await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io);
     callback(result);
-    const { rows } = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
+    const { rows } = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
     const user = await selectUser(data.user_id);
     rows.forEach((member, index) => {
       io.to(`@${member.user_id}`).emit('receive-signal', { ...user, signal: '002002', status: true, room_id: Number(data.room_id) });
@@ -213,7 +211,7 @@ io.on('connection', socket => {
       // ユーザーのserverでreaveをさせたい！
 
       // 他のユーザーに退室を通達,部屋の更新
-      const roomMembers = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
+      const roomMembers = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
       roomMembers.data.forEach((member, index) => {
         io.to(`@${member.user_id}`).emit('receive-signal', { data: {...result, user_id: data.user_id, room_id: data.room_id}, signal: '002997', status: true });
       })
@@ -233,7 +231,7 @@ io.on('connection', socket => {
     var { rows, status, message } = await createUserRoomWithPicture(data.roomName, data.userId, data.open_level, data.post_level, '部屋の画像ラベル0', path);
     if(!status)
       callback(new Response(status, rows, message, request))
-    const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ rows[0].chatroom_id, rows[0].user_id ], Message['/sql/user/room/status/single'], 'picture')
+    const room = await runGeneralSQL('/sql/user/room/status/single', [ rows[0].chatroom_id, rows[0].user_id ], 'picture')
     callback(room);
     const newRoom = await getSingleRoom(rows[0].user_id, rows[0].chatroom_id);
     [data.userId].forEach((user_id, index) => {
@@ -275,7 +273,7 @@ io.on('connection', socket => {
 
   socket.on('select-users-in-room', async (data, callback) => {
     console.log('select users in room.');
-    const response = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
+    const response = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
     if(!response.status)
       callback(response);
     callback({  status: response.status, rows: response.rows, message: response.message });
@@ -288,7 +286,7 @@ io.on('connection', socket => {
 
     const user = await selectUser(data.id);
     //フレンド情報の更新
-    const { rows : followers } = runGeneralSQL(SQL['select-users-followers'], [ data.id ], Message['select-users-followers'], 'picture')
+    const { rows : followers } = runGeneralSQL('select-users-followers', [ data.id ], 'picture')
     followers.concat(user.data[0]).forEach(follower => {
       io.to(`@${follower.id}`).emit('receive-signal', { data: user.data[0], signal: '003001', status: true });
     })
@@ -335,7 +333,7 @@ io.on('connection', socket => {
   })
 
   socket.on('get-friend-list', async (data, callback) => {
-    const { rows, status, message } = await runGeneralSQL(SQL['select-users-friends'], [ data.id ], Message['select-users-friends'], 'picture')
+    const { rows, status, message } = await runGeneralSQL('select-users-friends', [ data.id ], 'picture')
     if(!status)
       return { rows, status, message };
     callback(rows);
@@ -350,7 +348,7 @@ io.on('connection', socket => {
 
   socket.on('connect-to-friend', async (data, callback) => {
     logger.info(`socket.on:${ "connect-to-friend" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\tfriend_id:${ data.friend_id }`);
-    const result = await runGeneralSQL(SQL['insert-into-user-friend-unit'], [ data.user_id, data.friend_id ], Message['insert-into-user-friend-unit'], null)
+    const result = await runGeneralSQL('insert-into-user-friend-unit', [ data.user_id, data.friend_id ],null)
     callback(result);
     const friend = await selectUser(data.friend_id);
     io.to(`@${data.user_id}`).emit('receive-signal', { data: friend, signal: '001001', status: true });
@@ -359,10 +357,10 @@ io.on('connection', socket => {
   })
 
   socket.on('notice-reading-tweet', async (data, callback) => {
-    const { stauts:insertStatus, message:insertMessage } = runGeneralSQL(SQL['insert-into-user-tweet-unit'], [ data.user_id, data.tweet_id ], Message['insert-into-user-tweet-unit'], null)
+    const { stauts:insertStatus, message:insertMessage } = runGeneralSQL('insert-into-user-tweet-unit', [ data.user_id, data.tweet_id ], null)
     if(!insertStatus)
       callback({'status':insertStatus, 'message':insertMessage})
-    const { rows, status, message } = await runGeneralSQL(SQL['get-tweet-count'], [ data.tweet_id ], Message['get-tweet-count'], null)
+    const { rows, status, message } = await runGeneralSQL('get-tweet-count', [ data.tweet_id ], null)
     if(!status)
       callback({ status, message });
     const room_id = rows[0].room_id;
@@ -448,9 +446,9 @@ async function runProcesePerCondition(request:Request) {
       if(result.status && CHATROOMS.includes(data.room)){
         console.log('通知を送る')
         io.to(data.room).emit('receive-notification', result.data[0])
-        const { rows : room } = await runGeneralSQL(SQL['select-room'], [ data.room ], Message['select-room'] , 'picture')
+        const { rows : room } = await runGeneralSQL('select-room', [ data.room ], 'picture')
         if(room[0]["openlevel"]===3){
-          const { rows } = await runGeneralSQL(SQL['select-users-followers'], [ data.user ], Message['select-users-followers'], 'picture')
+          const { rows } = await runGeneralSQL('select-users-followers', [ data.user ], 'picture')
           io.to(`@${data.user}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });
           rows.forEach((usr, idx) => {
             io.to(`@${usr["id"]}`).emit('receive-signal', { data: result.data[0], signal: '000001', status: true });//<-ここでフォロワーに送る
@@ -474,7 +472,7 @@ async function runProcesePerCondition(request:Request) {
     // ユーザーが属する部屋リスト取得
     case "/user/room":
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/room'], [ data.user_id ], Message['/sql/user/room'], 'picture')
+      var { status, rows, message } = await runGeneralSQL('/sql/user/room', [ data.user_id ], 'picture')
       response = new Response(status, rows, message, request)
       break;
     // case '/room/create':
@@ -485,7 +483,7 @@ async function runProcesePerCondition(request:Request) {
       break;
     case "/room/user":
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/room/user'], [ data.room_id ], Message['/sql/room/user'], 'picture')
+      var { status, rows, message } = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
       response = new Response(status, rows, message, request)
       break;
     case '/room/tweet/picture':
@@ -495,21 +493,21 @@ async function runProcesePerCondition(request:Request) {
       break;
     case '/user/webhook':
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/user/webhook'], [ data.user_id ], Message['/sql/user/webhook'], null)
+      var { status, rows, message } = await runGeneralSQL('/sql/user/webhook', [ data.user_id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/option':
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/webhook/outgoing/id/output'], [ data.api_id ], Message['/sql/webhook/outgoing/id/output'], null)
+      var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/output', [ data.api_id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/output':
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL(SQL['/sql/webhook/outgoing/id/output'], [ data.api_id ], Message['/sql/webhook/outgoing/id/output'], null)
+      var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/output', [ data.api_id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/execute':
-      var options = await runGeneralSQL(SQL['/restapi/id/option'], [ data.restapi_id ], Message['/restapi/id/option'], null)
+      var options = await runGeneralSQL('/restapi/id/option', [ data.restapi_id ], null)
       var tmp = {}
       // Webhookのパラメータ作成
       for(const option of options.rows) {
@@ -525,11 +523,13 @@ async function runProcesePerCondition(request:Request) {
           // 作成されたテキストをObjectの指定箇所に挿入
           tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), outputText, tmp)
       }
+      logger.warn('dataの中身')
+      logger.warn(data)
       // APIの実行
-      await axios.post(data.url, tmp)
+      await axios({ method:data.method, url:data.url, data:tmp })
       .then(async res => {
         // APIから取得したデータを基にした出力（呟く）
-        var { status, rows, message } = await runGeneralSQL(SQL['/restapi/id/output/get'], [ data.restapi_id ], Message['/restapi/id/output/get'], null);
+        var { status, rows, message } = await runGeneralSQL('/restapi/id/output/get', [ data.restapi_id ], null);
         rows.forEach(async (output) => {
           // 任意のパラメータ値を取得
           var param = getValueFromObject(output.keyword.split('.').filter(t => t.length>0), res)
@@ -549,7 +549,7 @@ async function runProcesePerCondition(request:Request) {
       logger.info(request.rest)
       // RestAPIの登録
       var RestAPI_id:number = -1;
-      var { status, rows, message } = await runGeneralSQL(SQL['/restapi/id/add'], [ data.method, data.url, data.user_id ], Message['/restapi/id/add'], null)
+      var { status, rows, message } = await runGeneralSQL('/restapi/id/add', [ data.method, data.url, data.user_id ], null)
       if(rows.length>0)
         RestAPI_id = rows[0]['id']
       else
@@ -560,7 +560,7 @@ async function runProcesePerCondition(request:Request) {
         var value = getValueFromObject(key.split('.').filter(x=>x.length>0), data.data)
         var replaceKey = getValueFromObject(key.split('.').filter(x=>x.length>0), data.replaceKey)
         var regexpValue = getValueFromObject(key.split('.').filter(x=>x.length>0), data.regexpValue)
-        var resp = await runGeneralSQL(SQL['/restapi/id/option/add'], [ RestAPI_id, index+1, 'data', key,replaceKey, regexpValue, value ], Message['/restapi/id/option/add'], null)
+        var resp = await runGeneralSQL('/restapi/id/option/add', [ RestAPI_id, index+1, 'data', key,replaceKey, regexpValue, value ], null)
       })
       response = new Response(status, rows, message, request)
       break
@@ -590,7 +590,7 @@ async function runProcesePerCondition(request:Request) {
   // 正規表現に引っかかったOutgoing Webhookの実行
   switch(request.rest){
     case '/chat':
-      var checkOutgoing = await runGeneralSQL(SQL['/webhook/outgoing/check'], [ data.room, data.text ], Message['/webhook/outgoing/check'], null)
+      var checkOutgoing = await runGeneralSQL('/webhook/outgoing/check', [ data.room, data.text ], null)
       if(checkOutgoing.rows.length > 0) {
         // 正規表現に引っかかったOutgoing Webhookを順に実行
         checkOutgoing.rows.forEach(async (row) => {
@@ -681,7 +681,7 @@ async function chat(user:string, room:string, text:string, picture:any, head:str
     }
     // 画像のデータ保存
     fs.writeFileSync(path, setImage(picture), 'base64')
-    const { rows : pict } = await runGeneralSQL(SQL['insert-into-picture'], [ '練習用のラベル', path ], Message['insert-into-picture'], null)
+    const { rows : pict } = await runGeneralSQL('insert-into-picture', [ '練習用のラベル', path ], null)
     params = [ text, room, user, pict[0].id, head ]
   }else{
     // 画像を持たない時の処理
@@ -689,7 +689,7 @@ async function chat(user:string, room:string, text:string, picture:any, head:str
     params = [ text, room, user, head ]
   }
   // 共通の処理
-  const { rows : insert } = await runGeneralSQL(SQL[key], params, Message[key], null)
+  const { rows : insert } = await runGeneralSQL(key, params, null)
   // 部屋の更新?
   await updateRoomlatest(room);
   // ツイートの取得
@@ -738,7 +738,7 @@ app.post("/api", async function (req, response) {
   const { rest, data, appid } = req.body
   const request = new Request('/api', rest, data, appid)
   // APPID認証チェック
-  const checkAppid = await runGeneralSQL(SQL['/api/appid/check'], [ appid, rest ], Message['/api/appid/check'], null)
+  const checkAppid = await runGeneralSQL('/api/appid/check', [ appid, rest ], null)
   if(checkAppid.rows.length == 0) {
     return response.json(new Response(false, [], 'APPIDが存在しません。', request))
   }
@@ -848,12 +848,12 @@ cron.job(
     // TimeZoneを日本時間に修正
     currentTime.setHours(currentTime.getHours() + 9)
     logger.info('Schedule実行開始時刻:', currentTime)
-    var { status, rows, message } = await runGeneralSQL(SQL['/sql/schedule/get'], [], Message['/sql/schedule/get'], null)
+    var { status, rows, message } = await runGeneralSQL('/sql/schedule/get', [], null)
     rows.map(async (row) => {
-      const request = new Request('/schedule', '/webhook/id/execute', { url:row.url, restapi_id:row.id, text:row.text }, null)
+      const request = new Request('/schedule', '/webhook/id/execute', { url:row.url, method:row.method, restapi_id:row.id, text:row.text }, null)
       const response = await runProcesePerCondition(request)
       if(response.status == true) {
-        await runGeneralSQL(SQL['/sql/schedule/executetime/update'], [ currentTime.toISOString(), row.id, row.schedule_id ], Message['/sql/schedule/executetime/update'], null)
+        await runGeneralSQL('/sql/schedule/executetime/update', [ currentTime.toISOString(), row.id, row.schedule_id ], null)
         logger.info('schedule successfully and update "executeTime"!')
       }
     })

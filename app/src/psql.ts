@@ -254,7 +254,9 @@ const Message = {
   }
 
 // responseをそのままの形で返すパターン（insert,deleteはほとんどここに分類）
-function runGeneralSQL(sql: string, data: any[], message: object, toPicture: any) { // toPictures→画像化させるもの
+function runGeneralSQL(keyword: string, data: any[], toPicture: any) { // toPictures→画像化させるもの
+  const sql = SQL[keyword]
+  const message = Message[keyword]
   const pool = new Pool(pool_data);
   return pool.query(sql, data).then(async (response) => {
     pool.end().then(() => 
@@ -418,7 +420,7 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
   return pool.query("INSERT INTO chatroom(icon,name,openLevel,postLevel,start,latest) VALUES($1,$2,$3,$4,$5,$6) RETURNING *;",[chatroom_icon, chatroom_name, open_level, post_level, 'now()', 'now()'])
   .then(async re=>{
     const insertRoom = re.rows.map(x => { return { ...x }; });
-    const userRoomUnit = await runGeneralSQL(SQL['insert-into-user-room-unit'], [ user_id, re.rows[0].id, true, true, true ], Message['insert-into-user-room-unit'], null)
+    const userRoomUnit = await runGeneralSQL('insert-into-user-room-unit', [ user_id, re.rows[0].id, true, true, true ], null)
     pool.end().then(() => console.log('pool has ended'));
     return userRoomUnit;
   })
@@ -430,7 +432,7 @@ function createUserRoom(chatroom_icon: number, chatroom_path: string, chatroom_n
 
 async function createUserRoomWithPicture(chatroom_name: string, user_id: string, open_level: number, post_level: number, picture_label: string, picture_path: string){
   console.log("create user-room with picture.")
-  const  { rows, status } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
+  const  { rows, status } = await runGeneralSQL('insert-into-picture', [ picture_label, picture_path ], null)
   if(status){
     // 修正予定
     return await createUserRoom(rows[0].id, rows[0].path, chatroom_name, user_id, open_level, post_level);
@@ -447,7 +449,7 @@ async function createUserRoomWithPicture(chatroom_name: string, user_id: string,
  */
 async function addUserIntoRoom(user_id: string, room_id: number, opening: boolean, posting: boolean, io: any){
   console.log("add user into room.")
-  const insert = await runGeneralSQL(SQL['insert-into-user-room-unit'], [ user_id, room_id, false, opening, posting ], Message['insert-into-user-room-unit'], null)
+  const insert = await runGeneralSQL('insert-into-user-room-unit', [ user_id, room_id, false, opening, posting ], null)
   if(!insert.status)
     return insert;
   return await sendUpdatedRoomUsers(user_id, room_id, io);
@@ -533,18 +535,18 @@ function sendUpdatedRoomUsers(user_id: string, room_id: number, io: any){
 async function addUserWithPicture(user_id: string, user_name: string, user_password: string, user_mail: string, user_authority: boolean, user_publicity: number, picture_label: string, picture_path: string, response: any){
     console.log("add user with picture.");
     const pool = new Pool(pool_data);
-    const { rows, status, message } = await runGeneralSQL(SQL['insert-into-picture'], [ picture_label, picture_path ], Message['insert-into-picture'], null)
+    const { rows, status, message } = await runGeneralSQL('insert-into-picture', [ picture_label, picture_path ], null)
     if(!status)
       return { rows, status, message };
-    const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['insert-into-user'], [ user_id, user_name, user_password, rows[0].id, user_mail, user_authority, user_publicity ], Message['insert-into-user'], null)
+    const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL('insert-into-user', [ user_id, user_name, user_password, rows[0].id, user_mail, user_authority, user_publicity ], null)
     if(!userStatus){
-      console.log(runGeneralSQL(SQL['delete-from-picture'], [ rows[0].id ], Message['delete-from-picture'], null));
+      console.log(runGeneralSQL('delete-from-picture', [ rows[0].id ], null));
       return { 'rows':userRows, 'status':userStatus, 'message':userMessage }
     }
     //修正予定
     const room = await createUserRoom(userRows[0].image, picture_path, userRows[0].name, userRows[0].id, 1, 1);
     if(!room.status)
-      console.log(runGeneralSQL(SQL['delete-from-picture'], [ rows[0].id ], Message['delete-from-picture'], null));
+      console.log(runGeneralSQL('delete-from-picture', [ rows[0].id ], null));
     return room;
 }
 
@@ -607,7 +609,7 @@ function updateRoom(id: number, name: string, open_level: number, post_level: nu
   pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then(async (res) => {
     if(res.rows.length==1){
-        const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ id, user_id ], Message['/sql/user/room/status/single'], 'picture')
+        const room = await runGeneralSQL('/sql/user/room/status/single', [ id, user_id ], 'picture')
         if(!room.status)
           callback(room);
         console.log(room);
@@ -661,13 +663,13 @@ function getRoomStatus(id: number) {
 
 async function deleteRoom(room_id: number){
   console.log("delete room.")
-  const del_unit = await runGeneralSQL(SQL['delete-from-user-room-unit-by-room'], [ room_id ], Message['delete-from-user-room-unit-by-room'], null)
+  const del_unit = await runGeneralSQL('delete-from-user-room-unit-by-room', [ room_id ], null)
   if(!del_unit.status)
     return del_unit;
-  const del_room = await runGeneralSQL(SQL['delete-from-room'], [ room_id ], Message['delete-from-room'], null)
+  const del_room = await runGeneralSQL('delete-from-room', [ room_id ], null)
   if(!del_room.status)
     return del_room;
-  const { status, message } = await runGeneralSQL(SQL['delete-from-tweet-in-room'], [ room_id ], Message['delete-from-tweet-in-room'], null)
+  const { status, message } = await runGeneralSQL('delete-from-tweet-in-room', [ room_id ],  null)
   return { status, message };
   // pictureも消さなければいけないかも
 }
@@ -806,7 +808,7 @@ function selectUserWithId(keyword: string) {
 
 async function checkAndUpdateUser(id: string, name: string, picture: any, password: string, mail: string, authority: boolean, publicity: number){
   console.log("check and update user", id, name, mail, authority, publicity);
-  const select = await runGeneralSQL(SQL['select-user-with-pass'], [ id, password ], Message['select-user-with-pass'], null)
+  const select = await runGeneralSQL('select-user-with-pass', [ id, password ], null)
   if(!select.status)
     return select;
   if(select.data.rows.length !== 1)
@@ -826,13 +828,13 @@ async function checkAndUpdateUser(id: string, name: string, picture: any, passwo
 
 async function deleteUser(user_id: string){
   console.log("delete user");
-  const del_unit = await runGeneralSQL(SQL['delete-from-user-room-unit-by-user'], [ user_id ], Message['delete-from-user-room-unit-by-user'], null)
+  const del_unit = await runGeneralSQL('delete-from-user-room-unit-by-user', [ user_id ], null)
   if(!del_unit.status)
     return del_unit;
-  const { status, message } = await runGeneralSQL(SQL['delete-from-tweet-by-user'], [ user_id ], Message['delete-from-tweet-by-user'], null) //「削除されたユーザー用ユーザー」を作成して代替えしたい。
+  const { status, message } = await runGeneralSQL('delete-from-tweet-by-user', [ user_id ], null) //「削除されたユーザー用ユーザー」を作成して代替えしたい。
   if(!status)
     return { status, message };
-  const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL(SQL['delete-from-user'], [ user_id ], Message['delete-from-user'], null)
+  const { rows:userRows, status:userStatus, message:userMessage } = await runGeneralSQL('delete-from-user', [ user_id ], null)
   return { 'rows':userRows, 'status':userStatus, 'message':userMessage };
   // 画像も削除しなければならない！！
 }
@@ -847,12 +849,12 @@ async function getSingleRoom(user_id: string, room_id: number){
   console.log("get single room")
   let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
 
-  const room = await runGeneralSQL(SQL['/sql/user/room/status/single'], [ room_id, user_id ], Message['/sql/user/room/status/single'], 'picture')
+  const room = await runGeneralSQL('/sql/user/room/status/single', [ room_id, user_id ], 'picture')
   if(!room.status)
     return room;
   result.single_room = room.rows;
 
-  const member = await runGeneralSQL(SQL['/sql/room/user'], [ room_id ], Message['/sql/room/user'], 'picture')
+  const member = await runGeneralSQL('/sql/room/user', [ room_id ], 'picture')
   if(!member.status)
     return member;
   result.single_roommember = member.rows;
@@ -1055,8 +1057,6 @@ function getMemberInEachRoom(user_id: String) {
 }
 
 export {
-  SQL,
-  Message,
   runGeneralSQL,
   getSingleTweet,
   getCommonTweetsInRoom,
