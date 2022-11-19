@@ -184,21 +184,29 @@ io.on('connection', socket => {
 
   socket.on("add-user-into-room", async (data, callback) => {
     logger.info(`socket.on:${ "add-user-into-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
-    let result = await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io);
-    callback(result);
-    const { rows } = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
-    const user = await selectUser(data.user_id);
-    rows.forEach((member, index) => {
-      io.to(`@${member.user_id}`).emit('receive-signal', { ...user, signal: '002002', status: true, room_id: Number(data.room_id) });
-    })
-    const singleRoom = await getSingleRoom(data.user_id, data.room_id);
-    io.to(`@${data.user_id}`).emit('receive-signal', { ...singleRoom, signal: '002000', status: true });//002000　を新たな部屋の取得にしたい
+    let response = await addUserIntoRoom(data.user_id, data.room_id, data.opening, data.posting, io);
+    callback(response);
+    if(response.status == true) {
+      updateRoomUserViaSocket(data.room_id, '/room/member/update')
+    }
+    // const { rows } = await runGeneralSQL('/sql/room/user', [ data.room_id ], 'picture')
+    // rows.forEach(async (member, index) => {
+    //   var updatedRoom = await getSingleRoom(member.user_id, data.room_id);
+    //   io.to(`@${member.user_id}`).emit('/socket/client', { rest:'/room/update', data:updatedRoom, status: true });
+    // })
+    // const singleRoom = await getSingleRoom(data.user_id, data.room_id);
+    // io.to(`@${data.user_id}`).emit('/socket/client', { rest:'/room/update', data:singleRoom, status: true });
+    
     // 上記のユーザーのserverでjoinさせたい！
   })
 
   socket.on("update-user-in-room", async (data, callback) => {
     logger.info(`socket.on:${ "update-user-in-room" },\tkeys:${ Object.keys(data) },\tuser_id:${ data.user_id },\troom_id:${ data.room_id }`);
-    callback(await updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, io));
+    const response = await updateUserInRoom(data.user_id, data.room_id, data.opening, data.posting, io)
+    callback(response);
+    if(response.status == true) {
+      updateRoomUserViaSocket(data.room_id, '/room/member/update')
+    }
   })
 
   socket.on("remove-user-from-room", async (data, callback) => {
@@ -215,8 +223,20 @@ io.on('connection', socket => {
       roomMembers.data.forEach((member, index) => {
         io.to(`@${member.user_id}`).emit('receive-signal', { data: {...result, user_id: data.user_id, room_id: data.room_id}, signal: '002997', status: true });
       })
+      // updateRoomUserViaSocket(data.room_id, '/room/member/update')
     }
   })
+
+  const updateRoomUserViaSocket = async (room_id, rest) => {
+    const { rows } = await runGeneralSQL('/sql/room/user', [ room_id ], 'picture')
+    rows.forEach(async (member, index) => {
+      // var updatedRoom = await getSingleRoom(member.user_id, room_id);
+      var data = { room_id:room_id }
+      io.to(`@${member.user_id}`).emit('/socket/client', { rest:rest, data:data, status:true });
+    })
+    // const singleRoom = await getSingleRoom(user_id, room_id);
+    // io.to(`@${user_id}`).emit('/socket/client', { rest:rest, data:singleRoom, status: true });
+  }
 
   // /room/create
   socket.on('create-room', async (data,callback) => {

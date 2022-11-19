@@ -35,16 +35,18 @@ create table chatroom (
 );
 
 create table tweet (
-    id      serial not null,
-    tweet   varchar(512) not null,
-    room_id integer not null references chatroom(id),
-    time    timestamp not null DEFAULT now(),
-    user_id varchar(16) not null references user_table(id),
-    picture_id integer references picture_table(id),
-    head    integer DEFAULT null,
+    id          serial not null,
+    tweet       varchar(512) not null,
+    room_id     integer not null references chatroom(id) ON DELETE CASCADE,
+    time        timestamp not null DEFAULT now(),
+    user_id     varchar(16) not null references user_table(id),
+    picture_id  integer references picture_table(id),
+    head        integer DEFAULT null,
     -- period  timestamp,
     primary key(id)
 );
+
+-- ALTER TABLE tweet ALTER COLUMN room_id TYPE integer not null references chatroom(id) ON DELETE CASCADE;
 
 -- ReconnectionのIncoming webhook(REST API)
 -- 登録すると以下のようなAPIが作成される
