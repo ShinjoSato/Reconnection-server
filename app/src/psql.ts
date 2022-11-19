@@ -603,28 +603,28 @@ function selectRoomPublication(id: string) {
   })
 }
 
-function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, user_id: string, callback: Function){
+function updateRoom(id: number, name: string, open_level: number, post_level: number, picture: any, user_id: string){
   console.log("update room.");
   const pool = new Pool(pool_data);
-  pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
+  return pool.query("UPDATE chatroom SET (name, openLevel, postLevel) = ($1, $2, $3) WHERE id = $4 RETURNING *;", [name, open_level, post_level, id])
   .then(async (res) => {
     if(res.rows.length==1){
         const room = await runGeneralSQL('/sql/user/room/status/single', [ id, user_id ], 'picture')
         if(!room.status)
-          callback(room);
+          return room;
         console.log(room);
         console.log(room.rows);
         if(picture)
           saveImage(room.rows[0].picture_path, picture);
         pool.end().then(() => console.log('pool has ended'));
-        callback({message: 'update room success!', status: true, data: room.rows, id })
+        return {message: 'update room success!', status: true, data: room.rows, id }
     }else{
-      callback({message: "error update room", status: false});
+      return {message: "error update room", status: false};
     }
   })
   .catch((err) => {
     logger.error(err);
-    callback({message: "cannnot update room", status: false});
+    return {message: "cannnot update room", status: false};
   })
 }
 
@@ -847,7 +847,7 @@ async function deleteUser(user_id: string){
  */
 async function getSingleRoom(user_id: string, room_id: number){
   console.log("get single room")
-  let result = { single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
+  let result = { room_id:room_id, single_room:null, single_roommember:null, single_tweet:null, single_pictweet:null };
 
   const room = await runGeneralSQL('/sql/user/room/status/single', [ room_id, user_id ], 'picture')
   if(!room.status)

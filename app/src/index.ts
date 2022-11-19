@@ -235,7 +235,7 @@ io.on('connection', socket => {
     callback(room);
     const newRoom = await getSingleRoom(rows[0].user_id, rows[0].chatroom_id);
     [data.userId].forEach((user_id, index) => {
-      io.to(`@${user_id}`).emit('receive-signal', { data: newRoom, signal: '002001', status: true });
+      io.to(`@${user_id}`).emit('/socket/client', { data: newRoom, rest: '/room/add', status: true });
     })
     CHATROOMS.push(rows[0].chatroom_id as string);
     socket.join(rows[0].chatroom_id);
@@ -251,14 +251,24 @@ io.on('connection', socket => {
     callback(await selectCommonRoom(data.user_id, data.another_id));
   })
 
-  socket.on('update-room', (data, callback) => {
+  socket.on('update-room', async (data, callback) => {
     logger.info(`socket.on:${ "update-room" },\tkeys:${ Object.keys(data) },\tid:${ data.id },\tname:${ data.name }`);
-    updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, data.user_id, callback);
+    const response = await updateRoom(data.id, data.name, data.open_level, data.post_level, data.picture, data.user_id);
+    if(response.status == true) {
+      const updatedRoom = await getSingleRoom(data.user_id, data.id);
+      io.to(data.id).emit('/socket/client', { rest:'/room/update', data:updatedRoom, status: true });
+    }
+    callback(response)
   })
 
   socket.on('delete-room', async (data, callback) => {
     logger.info(`socket.on:${ "delete-room" },\tkeys:${ Object.keys(data) },\troom_id:${ data.room_id }`);
-    callback(await deleteRoom(data.room_id));
+    var response = await deleteRoom(data.room_id)
+    if(response.status == true) {
+      io.to(data.room_id).emit('/socket/client', { rest:'/room/remove', data:data })
+      // ホントはここでCHATROOMSから取り除く処理も必要！
+    }
+    callback(response);
   });
 
   socket.on('select-user-by-publicity', (data, callback) => {
