@@ -303,3 +303,17 @@ values(5, 1, 164, 'admin', '.status', 'ステータス番号は「status」で�
 -- SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id FROM OutgoingWebhook AS A
 -- LEFT JOIN RestAPI AS B on A.restapi_id = B.id
 -- WHERE A.room_id = 164 AND A.flag = TRUE AND 'ABC100' ~ A.regexp;
+
+insert into RestAPI(method, url, user_id)
+values('GET', 'https://api.openweathermap.org/data/2.5/weather', 'admin') RETURNING *;
+
+insert into RestAPI_Option(restapi_id, id, option, keyword, replacekeyword, regexpvalue, value)
+values
+(9, 1, 'params', '.APPID', null, null, 'XXXXXXXXXXXXXXXXXXXXXX'),
+(9, 2, 'params', '.q', null, null, 'Tokyo'); -- request.data.textの値を取得したい
+
+insert into Scheduler(restapi_id, id, room_id, text, minute, hour, day, month, date)
+values(9, 1, 1, 'openweathermapテスト', '*/3', '*', '*', '*', '*');
+
+insert into RestAPI_Output(restapi_id, id, room_id, user_id, keyword, value, regexpvalue)
+values(9, 1, 164, 'admin', '.data.weather[0].description', '現在の東京は"weather_condition"です！', '(weather_condition)');

@@ -538,7 +538,7 @@ async function runProcesePerCondition(request:Request) {
       break
     case '/webhook/id/execute':
       var options = await runGeneralSQL('/restapi/id/option', [ data.restapi_id ], null)
-      var tmp = {}
+      var tmp:{[key: string]: any} = {}
       // Webhookのパラメータ作成
       for(const option of options.rows) {
         var outputText = ''
@@ -551,13 +551,16 @@ async function runProcesePerCondition(request:Request) {
             outputText =  option.value.replace(new RegExp(option.regexpvalue), planeText)
           }
           // 作成されたテキストをObjectの指定箇所に挿入
-          tmp = pseudoJQ(option.keyword.split('.').filter(text => text.length > 0), outputText, tmp)
+          var keywords = option.keyword.split('.').filter(text => text.length > 0)
+          keywords.unshift(option.option)
+          tmp = pseudoJQ(keywords, outputText, tmp)
       }
       logger.warn('dataの中身')
       logger.warn(data)
       // APIの実行
-      await axios({ method:data.method, url:data.url, data:tmp })
+      await axios({ method:data.method, url:data.url, data:tmp.data, params:tmp.params })
       .then(async res => {
+        logger.debug(res)
         // APIから取得したデータを基にした出力（呟く）
         var { status, rows, message } = await runGeneralSQL('/restapi/id/output/get', [ data.restapi_id ], null);
         rows.forEach(async (output) => {
@@ -659,9 +662,13 @@ function pseudoJQ(keys:string[], value:string, obj:object) {
  * @param obj - 目的となる値を含むObjectデータ
  * @returns 目的となる値
  */
-function getValueFromObject(keys:string[], obj:object) {
+function getValueFromObject(keys, obj) {
   const key = keys.shift()
-  return (keys.length==0)? obj[key] : getValueFromObject(keys, obj[key])
+  return (keys.length==0)
+    ? obj[key]
+    : (key.match(/[\d]/g)==null)
+      ? getValueFromObject(keys, obj[key])
+      : getValueFromObject(keys, (obj[key.match(/.+(?=\[)/g)])[Number(key.match(/[\d]/g))])
 }
 
 /**
