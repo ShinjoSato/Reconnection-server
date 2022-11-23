@@ -528,12 +528,17 @@ async function runProcesePerCondition(request:Request) {
       break
     case '/webhook/id/option':
       logger.info(request.rest)
-      var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/output', [ data.api_id ], null)
+      var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/option', [ data.api_id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/output':
       logger.info(request.rest)
       var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/output', [ data.api_id ], null)
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/flag/update':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/flag/update', [ data.flag, data.id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/execute':
@@ -597,6 +602,11 @@ async function runProcesePerCondition(request:Request) {
       })
       response = new Response(status, rows, message, request)
       break
+    case "/scheduler/restapi/id/flag/update":
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL('/sql/scheduler/restapi/id/flag/update', [ data.flag, data.restapi_id, data.id ], null)
+      response = new Response(status, rows, message, request)
+      break;
     // mail 送信, 相手に送信完了メール & 特定のアドレスに確認メール & 特定のルームに投稿
     case "/mail":
       logger.info("/mail")
@@ -786,14 +796,11 @@ app.post("/api", async function (req, response) {
       logger.info('/test')
       response.json(new Response(true, [], 'API送受信に成功しました。', request))
       break
-    // 呟く
-    case '/chat':
-      logger.info('/chat')
-      response.json(await runProcesePerCondition(request))
-      break
-    // Outgoing Webhookの登録
-    case '/webhook/outgoing/add':
-      logger.info('/webhook/outgoing/add')
+    case '/chat': // 呟く
+    case '/webhook/outgoing/add': // Outgoing Webhookの登録
+    case '/webhook/id/flag/update':
+    case '/scheduler/restapi/id/flag/update':
+      logger.info(rest)
       response.json(await runProcesePerCondition(request))
       break
     // メール送信

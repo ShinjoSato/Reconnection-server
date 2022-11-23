@@ -142,6 +142,9 @@ const SQL = {
     JOIN RestAPI_Output AS Output ON API.id = Output.restapi_id
     WHERE API.id = $1;`,
   
+  '/sql/webhook/outgoing/id/flag/update':
+    `UPDATE OutgoingWebhook SET flag = ($1) WHERE id = $2 RETURNING *;`,
+  
   '/webhook/outgoing/check': //該当する部屋 and 正規表現に当てはまるテキスト and flagがtrue
     `SELECT A.restapi_id, A.room_id, A.flag, A.regexp, B.method, B.url, B.user_id, substring($2, A.regexp) AS value FROM OutgoingWebhook AS A
     LEFT JOIN RestAPI AS B on A.restapi_id = B.id
@@ -181,7 +184,10 @@ const SQL = {
     OR (length(substring(date, '\\d+'))>0 AND CAST(substring(date, '\\d+') AS integer) = CAST(date_part('dow', now()) AS integer)));`,
 
   '/sql/schedule/executetime/update':
-    `UPDATE Scheduler SET executeTime = $1 WHERE restapi_id=$2 AND id=$3 RETURNING *;`,
+    `UPDATE Scheduler SET executeTime = $1 WHERE restapi_id = $2 AND id = $3 RETURNING *;`,
+  
+  '/sql/scheduler/restapi/id/flag/update':
+    `UPDATE Scheduler SET flag = ($1) WHERE restapi_id = $2 AND id = $3 RETURNING *;`,
 }
 
 const Message = {
@@ -237,6 +243,8 @@ const Message = {
     { 'true':'成功', 'false':'失敗' },
   '/sql/webhook/outgoing/id/output':
     { 'true':'成功', 'false':'失敗' },
+  '/sql/webhook/outgoing/id/flag/update':
+    { 'true':'成功', 'false':'失敗' },
   '/webhook/outgoing/check':
     { 'true':'成功', 'false':'失敗' },
   '/restapi/id/add':
@@ -250,6 +258,8 @@ const Message = {
   '/sql/schedule/get':
     { 'true':'成功', 'false':'失敗' },
   '/sql/schedule/executetime/update':
+    { 'true':'成功', 'false':'失敗' },
+  '/sql/scheduler/restapi/id/flag/update':
     { 'true':'成功', 'false':'失敗' },
   }
 
