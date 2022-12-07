@@ -432,6 +432,8 @@ io.on('connection', socket => {
       case '/user/webhook':
       case '/webhook/id/option':
       case '/webhook/id/output':
+      case '/webhook/id/outgoing':
+      case '/webhook/id/scheduler':
         logger.info(rest)
         var response = await runProcesePerCondition(request)
         callback(response);
@@ -529,6 +531,22 @@ async function runProcesePerCondition(request:Request) {
     case '/webhook/id/option':
       logger.info(request.rest)
       var { status, rows, message } = await runGeneralSQL('/sql/webhook/outgoing/id/option', [ data.api_id ], null)
+      // var tmp:{[key: string]: any} = {}
+      // rows.map((row) => {
+      //   var keywords = row.keyword.split('.').filter(text => text.length > 0)
+      //   keywords.unshift(row.option)
+      //   tmp = pseudoJQ(keywords, row.value, tmp)
+      // })
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/outgoing':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL('/restapi/id/outgoingwebhook', [ data.api_id ], null)
+      response = new Response(status, rows, message, request)
+      break
+    case '/webhook/id/scheduler':
+      logger.info(request.rest)
+      var { status, rows, message } = await runGeneralSQL('/restapi/id/scheduler', [ data.api_id ], null)
       response = new Response(status, rows, message, request)
       break
     case '/webhook/id/output':
@@ -661,7 +679,7 @@ async function runProcesePerCondition(request:Request) {
  * @param obj - 更新させるObjectデータ
  * @returns valueが代入されたObjectデータ
  */
-function pseudoJQ(keys:string[], value:string, obj:object) {
+function pseudoJQ(keys:string[], value:any, obj:object) {
   const key = keys.shift()
   return { ...obj, [key]: (keys.length==0)? value : pseudoJQ(keys, value, (obj!=null && key in obj)? obj[key] : null) }
 }

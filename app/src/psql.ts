@@ -133,12 +133,12 @@ const SQL = {
     `SELECT * FROM RestAPI WHERE user_id = $1;`,
   
   '/sql/webhook/outgoing/id/option':
-    `SELECT API.id, API.method, Option.id AS option_id, Option.keyword, Option.replacekeyword, Option.value, Option.regexpvalue FROM RestAPI AS API
+    `SELECT API.id AS restapi_id, API.method, Option.id AS option_id, Option.option AS option, Option.keyword, Option.replacekeyword, Option.value, Option.regexpvalue FROM RestAPI AS API
     JOIN RestAPI_Option AS Option ON API.id = Option.restapi_id
     WHERE API.id = $1;`,
   
   '/sql/webhook/outgoing/id/output':
-    `SELECT API.id, API.method, Output.id AS output_id, Output.room_id, Output.user_id AS user_id, Output.keyword, Output.value, Output.regexpvalue FROM RestAPI AS API
+    `SELECT API.id AS restapi_id, API.method, Output.id AS output_id, Output.room_id, Output.user_id AS user_id, Output.keyword, Output.value, Output.regexpvalue FROM RestAPI AS API
     JOIN RestAPI_Output AS Output ON API.id = Output.restapi_id
     WHERE API.id = $1;`,
   
@@ -161,6 +161,12 @@ const SQL = {
 
   '/restapi/id/output/get':
     `SELECT * FROM RestAPI_Output WHERE restapi_id = $1;`,
+  
+  '/restapi/id/outgoingwebhook':
+    `SELECT * FROM OutgoingWebhook WHERE restapi_id = $1;`,
+  
+  '/restapi/id/scheduler':
+    `SELECT * FROM Scheduler WHERE restapi_id = $1;`,
   
   '/sql/schedule/get': //スケジュール実行するRestAPIのidを取得
     `SELECT RestAPI.*, Scheduler.id AS schedule_id, Scheduler.text FROM Scheduler
@@ -254,6 +260,10 @@ const Message = {
   '/restapi/id/option/add':
     { 'true':'成功', 'false':'失敗' },
   '/restapi/id/output/get':
+    { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/outgoingwebhook':
+    { 'true':'成功', 'false':'失敗' },
+  '/restapi/id/scheduler':
     { 'true':'成功', 'false':'失敗' },
   '/sql/schedule/get':
     { 'true':'成功', 'false':'失敗' },

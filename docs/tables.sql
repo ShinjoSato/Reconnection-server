@@ -116,7 +116,7 @@ create table OutgoingWebhook (
     regexp      varchar(64) not null, -- 引っかかったのもを発火させる為の正規表現
     restapi_id  integer not null references RestAPI(id),
     flag        boolean DEFAULT FALSE, -- trueの時は実行中, falseの時は無反応
-    user_id     varchar(16) not null references user_table(id), -- 
+    user_id     varchar(16) not null references user_table(id), -- 単なる管理しているユーザー
     createTime  timestamp not null DEFAULT now(),
     updateTime  timestamp not null DEFAULT now(),
     primary key(id)
@@ -136,15 +136,16 @@ create table Scheduler (
     month varchar(4) not null DEFAULT '*', -- 月 1-12
     date varchar(4) not null DEFAULT '*', -- 曜日 0-7 (0と7は日曜日)
     executeTime timestamp not null DEFAULT now(), -- 最後に実行された時間
+    user_id varchar(16) not null references user_table(id), -- 単なる管理しているユーザー
     createTime timestamp not null DEFAULT now(),
     updateTIme timestamp not null DEFAULT now(),
     primary key(restapi_id, id)
 );
--- insert into Scheduler(restapi_id, id, room_id, minute, hour, day, month, date)
--- values(5, 1, 1, '*', '*', '*', '*', '*');
+-- insert into Scheduler(restapi_id, id, room_id, user_id, text, minute, hour, day, month, date)
+-- values(5, 1, 1, 'admin', 'あああ', '*', '*', '*', '*', '*');
 
--- insert into Scheduler(restapi_id, id, room_id, text, minute, hour, day, month, date)
--- values(5, 1, 1, 'discord:スケジュール実行', '*/3', '*', '*', '*', '*');
+-- insert into Scheduler(restapi_id, id, room_id, user_id, text, minute, hour, day, month, date)
+-- values(5, 1, 1, 'admin', 'discord:スケジュール実行', '*/3', '*', '*', '*', '*');
 
 create table user_chatroom_unit (
     user_id     varchar(16) not null references user_table(id),
@@ -312,8 +313,8 @@ values
 (9, 1, 'params', '.APPID', null, null, 'XXXXXXXXXXXXXXXXXXXXXX'),
 (9, 2, 'params', '.q', null, null, 'Tokyo'); -- request.data.textの値を取得したい
 
-insert into Scheduler(restapi_id, id, room_id, text, minute, hour, day, month, date)
-values(9, 1, 1, 'openweathermapテスト', '*/3', '*', '*', '*', '*');
+insert into Scheduler(restapi_id, id, room_id, user_id, text, minute, hour, day, month, date)
+values(9, 1, 1, 'admin', 'openweathermapテスト', '*/3', '*', '*', '*', '*');
 
 insert into RestAPI_Output(restapi_id, id, room_id, user_id, keyword, value, regexpvalue)
 values(9, 1, 164, 'admin', '.data.weather[0].description', '現在の東京は"weather_condition"です！', '(weather_condition)');
