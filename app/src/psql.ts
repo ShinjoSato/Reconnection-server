@@ -83,7 +83,7 @@ const SQL = {
     "DELETE FROM user_table WHERE id=$1 RETURNING *;",
 
   'insert-into-user-tweet-unit':
-    `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2);`,
+    `INSERT INTO user_tweet_unit(user_id, tweet_id) VALUES($1, $2) RETURNING *;`,
 
   'insert-into-user-friend-unit':
     `INSERT INTO user_friend_unit(user_id, friend_id) VALUES($1, $2);`,

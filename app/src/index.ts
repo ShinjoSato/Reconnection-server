@@ -403,6 +403,7 @@ io.on('connection', socket => {
     return randomBytes(length).reduce((p, i) => p + (i % 36).toString(36), '')
   }
 
+  // 送信したユーザーへ返信
   socket.on('/socket/server', async (req, callback) => {
     logger.info('/socket/server')
     const { rest, data } = req
@@ -427,6 +428,7 @@ io.on('connection', socket => {
       case '/user/room': // userが属する全てのルームの取得 // get-users-rooms
       case '/room/create':
       case '/room/tweet': // get-tweets-in-room
+      case '/room/tweet/user/read':
       case '/room/user': // roomに属しているuser
       case '/room/tweet/picture': // roomで呟かれた画像付きツイート全て
       case '/user/webhook':
@@ -437,6 +439,22 @@ io.on('connection', socket => {
         logger.info(rest)
         var response = await runProcesePerCondition(request)
         callback(response);
+        break
+    }
+  })
+
+  // 特定の部屋に所属するユーザー全員へ送信
+  socket.on('/socket/server/room', async(req, callback) => {
+    logger.info('/socket/server/room')
+    const { rest, data } = req
+    const { room_id } = req.data
+    const request = new Request('/socket/server/room', rest, data, null);
+    switch(rest) {
+      case '/room/tweet/id/count/update':
+        // tweetの既読数の更新
+        var response = await runProcesePerCondition(request)
+        io.to(room_id).emit('/socket/client', response)
+        callback(response)
         break
     }
   })
@@ -511,6 +529,16 @@ async function runProcesePerCondition(request:Request) {
     case "/room/tweet": // ※送り手と受け手で既読などの取得データが異なる
       logger.info(request.rest)
       var { status, rows, message } = await getTweetInSingleRoom(data.user_id, data.room_id)
+      response = new Response(status, rows, message, request)
+      break;
+    case '/room/tweet/id/count/update':
+      logger.info(request.rest)
+      var { status, rows, message } = await  runGeneralSQL('get-tweet-count', [ data.tweet_id ], null)
+      response = new Response(status, rows, message, request)
+      break;
+    case "/room/tweet/user/read":
+      logger.info(request.rest)
+      var { status, rows, message } = await  runGeneralSQL('insert-into-user-tweet-unit', [ data.user_id, data.tweet_id ], null)
       response = new Response(status, rows, message, request)
       break;
     case "/room/user":
