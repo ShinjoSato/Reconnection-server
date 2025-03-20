@@ -8,6 +8,16 @@ services:
       - my_network
     ports:
       - "8528:8528"
+    environment:
+      # サーバー初期値
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8528
+      # データベース初期値
+      PSQL_HOST: chat_db
+      PSQL_PORT: 5432
+      PSQL_DATABASE: postgres
+      PSQL_USER: postgres
+      PSQL_PASSWORD: password
     volumes:
       - ./app:/usr/src/app
       - /usr/src/app/node_modules
