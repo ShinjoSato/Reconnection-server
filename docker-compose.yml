@@ -1,37 +1,38 @@
 version: '3.2'
 
 services:
-  disconnected:
+  chat_server:
+    build:
+      context: ./app
+    networks:
+      - my_network
+    ports:
+      - "8528:8528"
+    volumes:
+      - ./app:/usr/src/app
+      - /usr/src/app/node_modules
     depends_on:
-      - rdb
-    image: disconnected-server
-    networks:
-      - disconnected-net
-    volumes:
-      - type: bind
-        source: /home/ec2-user/images
-        target: /tmp_images
-    ports:
-      - 18000:8000
-    restart: always
-  
-  rdb:
-    image: disconnected-db
-    networks:
-      - disconnected-net
-    volumes:
-      - type: volume
-        source: sample_strage
-        target: /var/lib/postgresql/data
-    ports:
-      - 5432:5432
+      - chat_db
+
+  chat_db:
+    image: postgres:11.2
+    container_name: my_postgres
     restart: always
     environment:
-      - POSTGRES_USER:postgres
-      - POSTGRES_PASSWORD:password
-
-networks:
-  disconnected-net:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+    networks:
+      - my_network
+    ports:
+      - "25432:5432"
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d
+      - chat_postgres_data:/var/lib/postgresql/data # 永続化
 
 volumes:
-  sample_strage:
+  chat_postgres_data:
+
+networks:
+  my_network:
+    driver: bridge

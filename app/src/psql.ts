@@ -1,11 +1,11 @@
 // PostgreSQL
 const { Pool } = require('pg')
 const pool_data = {
-  user: 'postgres',
-  host: 'localhost',
-  database: 'postgres',
-  password: 'password',
-  port: 5432 //15432
+  user: process.env.PSQL_USER,
+  host: process.env.PSQL_HOST,
+  database: process.env.PSQL_DATABASE,
+  password: process.env.PSQL_PASSWORD,
+  port: process.env.PSQL_PORT,
 }
 import { configure, getLogger } from "log4js";
 configure({
