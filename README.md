@@ -1,7 +1,7 @@
 # 💬 リアルタイムチャットアプリ - サーバーサイド（Backend）
 
 <div style="display: flex; justify-content: center;">
-    <video controls src="https://github.com/user-attachments/assets/4ec7491e-b545-4de3-8e94-cd3cd340c906" muted="true"></video>
+    <video controls src="https://github.com/user-attachments/assets/69358905-3225-432c-99a4-737970aa86e4" muted="true"></video>
 </div>
 
 このリポジトリは、Socket.io と PostgreSQL を活用したリアルタイムチャットアプリのサーバーサイド構成です。  
